@@ -2,6 +2,7 @@
 
 Document de référence pour la mise en production.
 Rédigé le 06/11/2026 à partir des décisions prises avec Walid.
+Le site s'appelle désormais **Loop Agent** (décision du 06/11/2026). **[Décidé]**
 Statuts utilisés : **[Décidé]** (choix de Walid), **[Proposé]** (suggestion non validée), **[À confirmer]** (point ouvert).
 
 ---
@@ -163,7 +164,9 @@ L'échange se fait dans l'**espace de commentaire de l'idée concernée**, qui e
 La mémoire doit contenir les **statistiques cumulées**, pas seulement des leçons écrites : taux d'ouverture par type de message, par secteur, par pays, selon le projet. C'est la matière première du tour suivant. **[Décidé]**
 
 ### Mémoire des actions terminées
-Problème identifié : la Mémoire est organisée **par action**. Si une action ponctuelle terminée sort de la liste, sa mémoire sort avec elle — on perdrait les statistiques des vidéos passées. **[À confirmer : mémoire par projet, ou actions terminées conservées en Mémoire]**
+Problème identifié : la Mémoire est organisée **par action**. Si une action ponctuelle terminée sort de la liste, sa mémoire sort avec elle — on perdrait les statistiques des vidéos passées.
+
+**Tranché le 06/11/2026** : la mémoire est rangée **par projet** ; chaque leçon et chaque chiffre indique l'action qui l'a produit. Elle est stockée dans Loop Agent (pas dans Notion), et les agents l'écrivent dans le même envoi que leur tour. **[Décidé]**
 
 ---
 
@@ -215,7 +218,7 @@ Le fichier `atelier-maquette.html` est une page autonome fonctionnant dans le na
 
 ## 14. Points ouverts
 
-1. Mémoire des actions ponctuelles terminées : par projet, ou actions conservées en Mémoire ?
+1. ~~Mémoire des actions ponctuelles terminées~~ — tranché : par projet (voir §10).
 2. Petites Histoires Vraies : que deviennent les actions « métier » si chaque vidéo est une action ?
 3. Les propositions de l'agent : mélangées aux idées validées, ou dans leur propre bloc en haut ?
 4. Mécanisme exact par lequel les agents écrivent dans l'Atelier.

@@ -1,0 +1,10 @@
+.git
+.env
+.env.*
+.claude
+data
+node_modules
+test
+*.sqlite*
+atelier-maquette.html
+CADRAGE-ATELIER.md

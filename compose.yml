@@ -1,0 +1,23 @@
+# Loop Agent sur le VPS YouTube.
+# Rejoint le réseau Docker de Caddy (n8n_default) : Caddy le trouve par son nom
+# « loop-agent ». Aucun port n'est ouvert directement sur Internet.
+services:
+  loop-agent:
+    build: .
+    container_name: loop-agent
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      COOKIE_SECURE: '1'
+      TRUST_PROXY: '1'
+    volumes:
+      - loop_agent_data:/data
+    networks: [n8n_default]
+    mem_limit: 256m
+
+volumes:
+  loop_agent_data:
+
+networks:
+  n8n_default:
+    external: true

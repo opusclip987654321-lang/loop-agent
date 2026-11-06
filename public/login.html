@@ -1,0 +1,68 @@
+<!doctype html>
+<html lang="fr">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Loop Agent · Connexion</title>
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <link rel="stylesheet" href="/style.css" />
+    <style>
+      .login {
+        min-height: 100vh;
+        display: grid;
+        place-items: center;
+        padding: 16px;
+      }
+      .login form {
+        width: min(380px, 100%);
+        background: var(--panel);
+        border: 1px solid var(--line);
+        border-radius: 14px;
+        padding: 28px;
+      }
+      .login input {
+        width: 100%;
+        margin: 8px 0 16px;
+      }
+      .login button {
+        width: 100%;
+      }
+      .login .err {
+        color: var(--red);
+        min-height: 1.5em;
+        margin: 10px 0 0;
+      }
+    </style>
+  </head>
+  <body>
+    <main class="login">
+      <form id="f">
+        <div class="brand" style="margin-bottom: 18px">LOOP <span>AGENT</span></div>
+        <label for="pw">Mot de passe</label>
+        <input id="pw" type="password" autocomplete="current-password" required autofocus />
+        <button class="primary" type="submit">Se connecter</button>
+        <p class="err" id="err" role="alert"></p>
+      </form>
+    </main>
+    <script>
+      document.getElementById('f').addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const err = document.getElementById('err');
+        err.textContent = '';
+        try {
+          const r = await fetch('/api/login', {
+            method: 'POST',
+            credentials: 'same-origin',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ password: document.getElementById('pw').value }),
+          });
+          if (r.ok) return (location.href = '/');
+          const j = await r.json().catch(() => ({}));
+          err.textContent = j.error || 'Connexion impossible.';
+        } catch {
+          err.textContent = 'Serveur injoignable.';
+        }
+      });
+    </script>
+  </body>
+</html>
