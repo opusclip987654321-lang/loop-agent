@@ -160,3 +160,40 @@ test('chemins de fichiers : pas de sortie du dossier public', async () => {
     assert.notEqual(r.status, 200, p);
   }
 });
+
+async function mcp(body) {
+  const r = await fetch(base + '/mcp-test', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Accept: 'application/json, text/event-stream' },
+    body: JSON.stringify(body),
+  });
+  return { status: r.status, json: r.status === 202 ? null : await r.json() };
+}
+
+test('connecteur de test MCP : initialize, liste, appel, notification', async () => {
+  let r = await mcp({ jsonrpc: '2.0', id: 1, method: 'initialize', params: { protocolVersion: '2025-06-18', capabilities: {}, clientInfo: { name: 't', version: '1' } } });
+  assert.equal(r.status, 200);
+  assert.equal(r.json.result.protocolVersion, '2025-06-18');
+  assert.equal(r.json.result.serverInfo.name, 'loop-agent-test');
+
+  r = await mcp({ jsonrpc: '2.0', method: 'notifications/initialized' });
+  assert.equal(r.status, 202);
+
+  r = await mcp({ jsonrpc: '2.0', id: 2, method: 'tools/list' });
+  assert.deepEqual(r.json.result.tools.map((t) => t.name), ['dire_bonjour']);
+
+  r = await mcp({ jsonrpc: '2.0', id: 3, method: 'tools/call', params: { name: 'dire_bonjour', arguments: { de: 'test auto' } } });
+  assert.match(r.json.result.content[0].text, /Bonjour test auto/);
+
+  r = await mcp({ jsonrpc: '2.0', id: 4, method: 'inexistant' });
+  assert.equal(r.json.error.code, -32601);
+
+  const { cookie } = await login();
+  const pings = await (await fetch(base + '/api/mcp-pings', { headers: { Cookie: cookie } })).json();
+  assert.equal(pings[0].source, 'test auto');
+
+  const wk = await fetch(base + '/.well-known/oauth-protected-resource');
+  assert.equal(wk.status, 404);
+  const get = await fetch(base + '/mcp-test');
+  assert.equal(get.status, 405);
+});

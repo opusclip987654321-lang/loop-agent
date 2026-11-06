@@ -1,5 +1,8 @@
-// Demande un mot de passe (sans l'afficher) et imprime la ligne à coller dans .env.
-// Usage : npm run hash-password
+// Demande un mot de passe (sans l'afficher) et produit son empreinte.
+// Usage :
+//   npm run hash-password                       -> affiche la ligne à coller dans .env
+//   node scripts/hash-password.js --write .env  -> écrit la ligne dans ce fichier
+import { readFileSync, writeFileSync, existsSync } from 'node:fs';
 import { hashPassword } from '../server/auth.js';
 
 function ask(prompt) {
@@ -29,7 +32,10 @@ function ask(prompt) {
   });
 }
 
-const a = await ask('Mot de passe Loop Agent : ');
+const writeIdx = process.argv.indexOf('--write');
+const target = writeIdx > 0 ? process.argv[writeIdx + 1] : null;
+
+const a = await ask('Mot de passe Loop Agent (12 caractères minimum) : ');
 if (a.length < 12) {
   console.error('Trop court : 12 caractères minimum.');
   process.exit(1);
@@ -39,5 +45,15 @@ if (a !== b) {
   console.error('Les deux saisies ne correspondent pas.');
   process.exit(1);
 }
-console.log('\nColle cette ligne dans le fichier .env du serveur :\n');
-console.log(`LOOP_AGENT_PASSWORD_HASH='${hashPassword(a)}'`);
+const line = `LOOP_AGENT_PASSWORD_HASH='${hashPassword(a)}'`;
+
+if (target) {
+  const before = existsSync(target) ? readFileSync(target, 'utf8') : '';
+  const kept = before.split('\n').filter((l) => !l.startsWith('LOOP_AGENT_PASSWORD_HASH='));
+  while (kept.length && kept[kept.length - 1] === '') kept.pop();
+  writeFileSync(target, [...kept, line, ''].join('\n'), { mode: 0o600 });
+  console.log(`\nC’est enregistré dans ${target}. Le mot de passe lui-même n’est écrit nulle part.`);
+} else {
+  console.log('\nColle cette ligne dans le fichier .env du serveur :\n');
+  console.log(line);
+}

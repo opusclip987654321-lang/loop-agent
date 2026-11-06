@@ -5,6 +5,7 @@ import { randomBytes } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { PROJECTS, isValidDocKey } from './projects.js';
 import { verifyPassword, newSessionToken, tokenHash, createLoginLimiter } from './auth.js';
+import { createMcpHandler } from './mcp.js';
 
 const PUBLIC_DIR = fileURLToPath(new URL('../public/', import.meta.url));
 const COOKIE = 'la_session';
@@ -100,6 +101,33 @@ export function createApp({ db, dataDir, passwordHash, cookieSecure = false, tru
   const filesDir = join(dataDir, 'files');
   const sessionMs = sessionDays * 24 * 3600 * 1000;
 
+  // Connecteur de TEST (sans connexion) : un seul outil inoffensif, pour vérifier
+  // qu'une tâche programmée claude.ai sait utiliser un connecteur. À retirer
+  // quand le vrai connecteur (avec connexion) sera en place.
+  const mcpTest = createMcpHandler({
+    name: 'loop-agent-test',
+    version: '0.1.0',
+    instructions: 'Connecteur de test de Loop Agent. Un seul outil : dire_bonjour.',
+    tools: [
+      {
+        name: 'dire_bonjour',
+        description:
+          'Test de connexion à Loop Agent. Appelle cet outil avec le nom du projet ou de la tâche qui appelle. Il répond « bonjour » et note l’heure de l’appel.',
+        inputSchema: {
+          type: 'object',
+          properties: { de: { type: 'string', description: 'Qui appelle (nom du projet ou de la tâche).' } },
+          required: ['de'],
+        },
+        handler(args) {
+          const source = String(args.de || 'inconnu').slice(0, 120);
+          const at = db.addPing(source);
+          console.log(`[mcp-test] ${at} dire_bonjour appelé par « ${source} »`);
+          return `Bonjour ${source} ! Appel bien reçu par Loop Agent le ${at}.`;
+        },
+      },
+    ],
+  });
+
   function clientIp(req) {
     if (trustProxy) {
       const xff = req.headers['x-forwarded-for'];
@@ -192,6 +220,8 @@ export function createApp({ db, dataDir, passwordHash, cookieSecure = false, tru
 
     if (path === '/api/versions' && method === 'GET') return send(res, 200, db.versions());
 
+    if (path === '/api/mcp-pings' && method === 'GET') return send(res, 200, db.lastPings());
+
     const docMatch = /^\/api\/docs\/([^/]+)$/.exec(path);
     if (docMatch) {
       const key = decodeURIComponent(docMatch[1]);
@@ -275,6 +305,21 @@ export function createApp({ db, dataDir, passwordHash, cookieSecure = false, tru
     const path = url.pathname;
     try {
       if (path === '/healthz') return send(res, 200, { ok: true });
+      // Pas encore de connexion OAuth : on répond clairement « rien ici » (404),
+      // pour qu'un client MCP comprenne que le connecteur de test est sans connexion.
+      if (path.startsWith('/.well-known/')) throw new HttpError(404, 'Introuvable.');
+      if (path === '/mcp-test') {
+        if (req.method !== 'POST') throw new HttpError(405, 'POST uniquement.');
+        const origin = req.headers.origin;
+        if (origin && !/^https:\/\/([a-z0-9-]+\.)*(claude\.ai|claude\.com|anthropic\.com)$/.test(origin))
+          throw new HttpError(403, 'Origine refusée.');
+        const { status, body } = await mcpTest(await readJson(req, 1024 * 1024), {});
+        if (body === null) {
+          res.writeHead(202, SECURITY_HEADERS);
+          return res.end();
+        }
+        return send(res, status, body);
+      }
       if (path.startsWith('/api/')) return await handleApi(req, res, path);
       if (req.method !== 'GET' && req.method !== 'HEAD') throw new HttpError(405, 'Méthode non permise.');
       if (!PUBLIC_PATHS.has(path) && !isAuthed(req)) {

@@ -25,6 +25,10 @@ export function openDb(dataDir) {
       created_at INTEGER NOT NULL,
       expires_at INTEGER NOT NULL
     );
+    CREATE TABLE IF NOT EXISTS mcp_pings (
+      at     TEXT NOT NULL,
+      source TEXT NOT NULL
+    );
     CREATE TABLE IF NOT EXISTS files (
       id         TEXT PRIMARY KEY,
       name       TEXT NOT NULL,
@@ -51,6 +55,8 @@ export function openDb(dataDir) {
     addFile: db.prepare('INSERT INTO files (id, name, mime, size, created_at) VALUES (?, ?, ?, ?, ?)'),
     getFile: db.prepare('SELECT id, name, mime, size FROM files WHERE id = ?'),
     delFile: db.prepare('DELETE FROM files WHERE id = ?'),
+    addPing: db.prepare('INSERT INTO mcp_pings (at, source) VALUES (?, ?)'),
+    lastPings: db.prepare('SELECT at, source FROM mcp_pings ORDER BY at DESC LIMIT 50'),
   };
 
   return {
@@ -115,6 +121,14 @@ export function openDb(dataDir) {
     },
     deleteFile(id) {
       q.delFile.run(id);
+    },
+    addPing(source) {
+      const at = new Date().toISOString();
+      q.addPing.run(at, source);
+      return at;
+    },
+    lastPings() {
+      return q.lastPings.all();
     },
     close() {
       db.close();
