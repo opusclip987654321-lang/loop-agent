@@ -104,6 +104,7 @@ export function createApp({
   trustProxy = false,
   sessionDays = 30,
   onAgentWrite = () => {},
+  onToolDone = () => {},
 }) {
   if (!passwordHash) throw new Error('LOOP_AGENT_PASSWORD_HASH manquant : lance « npm run hash-password ».');
   const limiter = createLoginLimiter();
@@ -117,7 +118,7 @@ export function createApp({
     name: 'loop-agent',
     version: '1.0.0',
     instructions: CONNECTOR_INSTRUCTIONS,
-    tools: createAgentTools({ db, dataDir, onAgentWrite }),
+    tools: createAgentTools({ db, dataDir, onAgentWrite, onToolDone }),
   });
 
   function agentKeyFrom(req) {

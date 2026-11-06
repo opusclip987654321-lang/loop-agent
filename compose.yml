@@ -10,6 +10,7 @@ services:
     environment:
       COOKIE_SECURE: '1'
       TRUST_PROXY: '1'
+      TZ: Europe/Paris
     volumes:
       - loop_agent_data:/data
     networks: [n8n_default]

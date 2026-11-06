@@ -1,6 +1,9 @@
 import { createServer } from 'node:http';
 import { openDb } from './db.js';
 import { createApp } from './app.js';
+import { createNotifier } from './telegram.js';
+import { scheduleBackups } from './backup.js';
+import { PROJECTS } from './projects.js';
 
 const config = {
   port: Number(process.env.PORT || 3000),
@@ -18,13 +21,40 @@ if (!config.passwordHash) {
 }
 
 const db = openDb(config.dataDir);
-const server = createServer(createApp({ db, ...config }));
+
+const notifier = createNotifier({
+  db,
+  token: process.env.TELEGRAM_BOT_TOKEN,
+  chatId: process.env.TELEGRAM_CHAT_ID,
+  siteUrl: process.env.SITE_URL || '',
+  quietMs: Number(process.env.TELEGRAM_QUIET_MINUTES || 3) * 60 * 1000,
+  labelFor: (agent) => {
+    const id = agent.replace(/^agent:/, '');
+    if (id === 'factures') return 'Factures';
+    return PROJECTS.find((p) => p.id === id)?.name || id;
+  },
+});
+const stopTelegram = notifier.start();
+console.log(notifier.enabled ? 'Récap Telegram : actif.' : 'Récap Telegram : inactif (TELEGRAM_BOT_TOKEN / TELEGRAM_CHAT_ID absents).');
+
+const stopBackups = scheduleBackups({
+  db,
+  dataDir: config.dataDir,
+  keep: Number(process.env.BACKUP_KEEP || 14),
+  hour: Number(process.env.BACKUP_HOUR || 3),
+});
+
+const server = createServer(
+  createApp({ db, ...config, onToolDone: (agent, tool, args) => notifier.note(agent, tool, args) })
+);
 server.requestTimeout = 60_000;
 server.listen(config.port, config.host, () => {
   console.log(`Loop Agent écoute sur http://${config.host}:${config.port}`);
 });
 
 function shutdown() {
+  stopTelegram();
+  stopBackups();
   server.close(() => {
     db.close();
     process.exit(0);

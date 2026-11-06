@@ -37,6 +37,13 @@ export function openDb(dataDir) {
       at     TEXT NOT NULL,
       source TEXT NOT NULL
     );
+    CREATE TABLE IF NOT EXISTS notices (
+      id       INTEGER PRIMARY KEY AUTOINCREMENT,
+      agent    TEXT NOT NULL,
+      at       TEXT NOT NULL,
+      line     TEXT NOT NULL,
+      needs_ok INTEGER NOT NULL DEFAULT 0
+    );
     CREATE TABLE IF NOT EXISTS files (
       id         TEXT PRIMARY KEY,
       name       TEXT NOT NULL,
@@ -70,6 +77,10 @@ export function openDb(dataDir) {
     revokeKey: db.prepare('UPDATE agent_keys SET revoked_at = ? WHERE id = ? AND revoked_at IS NULL'),
     addPing: db.prepare('INSERT INTO mcp_pings (at, source) VALUES (?, ?)'),
     lastPings: db.prepare('SELECT at, source FROM mcp_pings ORDER BY at DESC LIMIT 50'),
+    addNotice: db.prepare('INSERT INTO notices (agent, at, line, needs_ok) VALUES (?, ?, ?, ?)'),
+    quietAgents: db.prepare('SELECT agent FROM notices GROUP BY agent HAVING MAX(at) <= ?'),
+    noticesFor: db.prepare('SELECT id, line, needs_ok FROM notices WHERE agent = ? ORDER BY id'),
+    delNotice: db.prepare('DELETE FROM notices WHERE id = ?'),
   };
 
   return {
@@ -156,6 +167,22 @@ export function openDb(dataDir) {
     },
     lastPings() {
       return q.lastPings.all();
+    },
+    addNotice(agent, line, needsOk) {
+      q.addNotice.run(agent, new Date().toISOString(), line, needsOk ? 1 : 0);
+    },
+    quietNoticeAgents(cutoffIso) {
+      return q.quietAgents.all(cutoffIso).map((r) => r.agent);
+    },
+    noticesFor(agent) {
+      return q.noticesFor.all(agent);
+    },
+    deleteNotices(ids) {
+      for (const id of ids) q.delNotice.run(id);
+    },
+    // Copie cohérente de la base (même pendant les écritures), pour les sauvegardes.
+    backupTo(file) {
+      db.exec(`VACUUM INTO '${String(file).replace(/'/g, "''")}'`);
     },
     close() {
       db.close();

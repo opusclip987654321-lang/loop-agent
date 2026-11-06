@@ -108,7 +108,7 @@ function taskColor(t) {
   return 'vert';
 }
 
-export function createAgentTools({ db, dataDir, onAgentWrite = () => {} }) {
+export function createAgentTools({ db, dataDir, onAgentWrite = () => {}, onToolDone = () => {} }) {
   function readProject(projectId) {
     const p = findProject(projectId);
     const d = db.getDoc('project:' + p.id);
@@ -564,7 +564,14 @@ export function createAgentTools({ db, dataDir, onAgentWrite = () => {} }) {
     ...t,
     async handler(args, ctx) {
       try {
-        return await t.handler(args || {}, ctx);
+        const out = await t.handler(args || {}, ctx);
+        const who = t.name === 'enregistrer_facture' ? 'agent:factures' : agentName(args || {});
+        try {
+          onToolDone(who, t.name, args || {});
+        } catch (e) {
+          console.error(new Date().toISOString(), 'suivi outil', t.name, e);
+        }
+        return out;
       } catch (e) {
         if (e instanceof ToolError) throw e;
         console.error(new Date().toISOString(), 'outil', t.name, e);
