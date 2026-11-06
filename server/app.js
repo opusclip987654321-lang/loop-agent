@@ -6,6 +6,7 @@ import { fileURLToPath } from 'node:url';
 import { PROJECTS, isValidDocKey } from './projects.js';
 import { verifyPassword, newSessionToken, tokenHash, createLoginLimiter } from './auth.js';
 import { createMcpHandler } from './mcp.js';
+import { createAgentTools, CONNECTOR_INSTRUCTIONS } from './agent-tools.js';
 
 const PUBLIC_DIR = fileURLToPath(new URL('../public/', import.meta.url));
 const COOKIE = 'la_session';
@@ -95,38 +96,35 @@ function send(res, status, body, headers = {}) {
   res.end(payload);
 }
 
-export function createApp({ db, dataDir, passwordHash, cookieSecure = false, trustProxy = false, sessionDays = 30 }) {
+export function createApp({
+  db,
+  dataDir,
+  passwordHash,
+  cookieSecure = false,
+  trustProxy = false,
+  sessionDays = 30,
+  onAgentWrite = () => {},
+}) {
   if (!passwordHash) throw new Error('LOOP_AGENT_PASSWORD_HASH manquant : lance « npm run hash-password ».');
   const limiter = createLoginLimiter();
   const filesDir = join(dataDir, 'files');
   const sessionMs = sessionDays * 24 * 3600 * 1000;
 
-  // Connecteur de TEST (sans connexion) : un seul outil inoffensif, pour vérifier
-  // qu'une tâche programmée claude.ai sait utiliser un connecteur. À retirer
-  // quand le vrai connecteur (avec connexion) sera en place.
-  const mcpTest = createMcpHandler({
-    name: 'loop-agent-test',
-    version: '0.1.0',
-    instructions: 'Connecteur de test de Loop Agent. Un seul outil : dire_bonjour.',
-    tools: [
-      {
-        name: 'dire_bonjour',
-        description:
-          'Test de connexion à Loop Agent. Appelle cet outil avec le nom du projet ou de la tâche qui appelle. Il répond « bonjour » et note l’heure de l’appel.',
-        inputSchema: {
-          type: 'object',
-          properties: { de: { type: 'string', description: 'Qui appelle (nom du projet ou de la tâche).' } },
-          required: ['de'],
-        },
-        handler(args) {
-          const source = String(args.de || 'inconnu').slice(0, 120);
-          const at = db.addPing(source);
-          console.log(`[mcp-test] ${at} dire_bonjour appelé par « ${source} »`);
-          return `Bonjour ${source} ! Appel bien reçu par Loop Agent le ${at}.`;
-        },
-      },
-    ],
+  // Connecteur des agents (claude.ai) : clé dans l'en-tête Authorization,
+  // rangée par claude.ai, jamais dans les consignes des projets.
+  const keyLimiter = createLoginLimiter({ max: 20 });
+  const mcp = createMcpHandler({
+    name: 'loop-agent',
+    version: '1.0.0',
+    instructions: CONNECTOR_INSTRUCTIONS,
+    tools: createAgentTools({ db, dataDir, onAgentWrite }),
   });
+
+  function agentKeyFrom(req) {
+    const h = String(req.headers.authorization || '');
+    const m = /^Bearer\s+(\S+)$/i.exec(h);
+    return m ? m[1] : null;
+  }
 
   function clientIp(req) {
     if (trustProxy) {
@@ -220,7 +218,6 @@ export function createApp({ db, dataDir, passwordHash, cookieSecure = false, tru
 
     if (path === '/api/versions' && method === 'GET') return send(res, 200, db.versions());
 
-    if (path === '/api/mcp-pings' && method === 'GET') return send(res, 200, db.lastPings());
 
     const docMatch = /^\/api\/docs\/([^/]+)$/.exec(path);
     if (docMatch) {
@@ -305,15 +302,23 @@ export function createApp({ db, dataDir, passwordHash, cookieSecure = false, tru
     const path = url.pathname;
     try {
       if (path === '/healthz') return send(res, 200, { ok: true });
-      // Pas encore de connexion OAuth : on répond clairement « rien ici » (404),
-      // pour qu'un client MCP comprenne que le connecteur de test est sans connexion.
+      // Pas d'OAuth : la connexion se fait par une clé dans l'en-tête. On répond
+      // clairement « rien ici » (404) aux recherches de configuration OAuth.
       if (path.startsWith('/.well-known/')) throw new HttpError(404, 'Introuvable.');
-      if (path === '/mcp-test') {
+      if (path === '/mcp') {
         if (req.method !== 'POST') throw new HttpError(405, 'POST uniquement.');
         const origin = req.headers.origin;
         if (origin && !/^https:\/\/([a-z0-9-]+\.)*(claude\.ai|claude\.com|anthropic\.com)$/.test(origin))
           throw new HttpError(403, 'Origine refusée.');
-        const { status, body } = await mcpTest(await readJson(req, 1024 * 1024), {});
+        const ip = clientIp(req);
+        if (keyLimiter.blocked(ip)) throw new HttpError(429, 'Trop d’essais.');
+        const key = agentKeyFrom(req);
+        const agent = key ? db.findAgentKey(tokenHash(key)) : null;
+        if (!agent) {
+          keyLimiter.fail(ip);
+          throw new HttpError(401, 'Clé d’agent manquante ou invalide.');
+        }
+        const { status, body } = await mcp(await readJson(req, 1024 * 1024), { agent });
         if (body === null) {
           res.writeHead(202, SECURITY_HEADERS);
           return res.end();

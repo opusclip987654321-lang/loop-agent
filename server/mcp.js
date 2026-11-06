@@ -44,6 +44,8 @@ export function createMcpHandler({ name, version, instructions, tools }) {
           if (!tool) return rpcError(msg.id, -32602, 'Outil inconnu : ' + p.name);
           try {
             const out = await tool.handler(p.arguments || {}, ctx);
+            if (out && typeof out === 'object' && Array.isArray(out.content))
+              return rpcResult(msg.id, { content: out.content, isError: false });
             const text = typeof out === 'string' ? out : JSON.stringify(out, null, 2);
             return rpcResult(msg.id, { content: [{ type: 'text', text }], isError: false });
           } catch (e) {

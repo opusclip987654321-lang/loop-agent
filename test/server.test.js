@@ -6,7 +6,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { openDb } from '../server/db.js';
 import { createApp } from '../server/app.js';
-import { hashPassword, verifyPassword } from '../server/auth.js';
+import { hashPassword, verifyPassword, tokenHash } from '../server/auth.js';
 
 const PASSWORD = 'mot-de-passe-de-test-123';
 let server, base, dataDir, db;
@@ -161,39 +161,146 @@ test('chemins de fichiers : pas de sortie du dossier public', async () => {
   }
 });
 
-async function mcp(body) {
-  const r = await fetch(base + '/mcp-test', {
+// ---------- Connecteur des agents (/mcp) ----------
+const AGENT_KEY = 'la_cle-de-test-agent';
+let rpcId = 0;
+
+async function mcp(method, params, key = AGENT_KEY) {
+  const r = await fetch(base + '/mcp', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', Accept: 'application/json, text/event-stream' },
-    body: JSON.stringify(body),
+    headers: {
+      'Content-Type': 'application/json',
+      Accept: 'application/json, text/event-stream',
+      ...(key ? { Authorization: 'Bearer ' + key } : {}),
+    },
+    body: JSON.stringify({ jsonrpc: '2.0', id: ++rpcId, method, params }),
   });
   return { status: r.status, json: r.status === 202 ? null : await r.json() };
 }
+async function call(name, args) {
+  const r = await mcp('tools/call', { name, arguments: args });
+  const res = r.json.result;
+  const t = res.content[0].text;
+  let parsed = t;
+  try {
+    parsed = JSON.parse(t);
+  } catch {}
+  return { isError: res.isError, out: parsed, raw: res };
+}
+const BRIEF = {
+  observe: '61 % des fiches sans adresse sur 120 préparées (30 derniers jours).',
+  deduction: 'La recherche gratuite rate les auteurs auto-édités (hypothèse).',
+  proposition: 'Ajouter la recherche sur le site de l’éditeur, sur imp-envois, dès demain.',
+  effet: '+20 adresses par semaine attendues, 10 min par tour, 0 €.',
+  si_rien: 'Le plafond d’envoi reste inutilisé ; sous 2 semaines la file se vide.',
+};
 
-test('connecteur de test MCP : initialize, liste, appel, notification', async () => {
-  let r = await mcp({ jsonrpc: '2.0', id: 1, method: 'initialize', params: { protocolVersion: '2025-06-18', capabilities: {}, clientInfo: { name: 't', version: '1' } } });
-  assert.equal(r.status, 200);
-  assert.equal(r.json.result.protocolVersion, '2025-06-18');
-  assert.equal(r.json.result.serverInfo.name, 'loop-agent-test');
+test('connecteur : sans clé ou mauvaise clé → 401', async () => {
+  db.addAgentKey('cle-test', 'test', tokenHash(AGENT_KEY));
+  assert.equal((await mcp('tools/list', {}, null)).status, 401);
+  assert.equal((await mcp('tools/list', {}, 'la_faux')).status, 401);
+  assert.equal((await fetch(base + '/mcp')).status, 405);
+  assert.equal((await fetch(base + '/.well-known/oauth-protected-resource')).status, 404);
+});
 
-  r = await mcp({ jsonrpc: '2.0', method: 'notifications/initialized' });
-  assert.equal(r.status, 202);
+test('connecteur : initialize et liste des outils', async () => {
+  const init = await mcp('initialize', { protocolVersion: '2025-06-18', capabilities: {}, clientInfo: { name: 't', version: '1' } });
+  assert.equal(init.json.result.serverInfo.name, 'loop-agent');
+  assert.match(init.json.result.instructions, /ne commande JAMAIS rien/);
+  const tools = (await mcp('tools/list', {})).json.result.tools.map((t) => t.name);
+  for (const n of ['lister_projets', 'lire_projet', 'ecrire_tour', 'proposer_action', 'proposer_modification', 'proposer_idee', 'noter_lecon', 'changer_statut_lecon', 'signaler_acces', 'factures_a_lire', 'lire_facture', 'enregistrer_facture'])
+    assert.ok(tools.includes(n), n);
+});
 
-  r = await mcp({ jsonrpc: '2.0', id: 2, method: 'tools/list' });
-  assert.deepEqual(r.json.result.tools.map((t) => t.name), ['dire_bonjour']);
+test('connecteur : un tour complet sur un projet jamais ouvert', async () => {
+  let r = await call('lire_projet', { projet: 'impacteur-mail' });
+  assert.equal(r.out.actions.length, 3, '3 boucles permanentes par défaut');
 
-  r = await mcp({ jsonrpc: '2.0', id: 3, method: 'tools/call', params: { name: 'dire_bonjour', arguments: { de: 'test auto' } } });
-  assert.match(r.json.result.content[0].text, /Bonjour test auto/);
+  // Proposition sans les 5 points : refusée.
+  r = await call('proposer_action', { projet: 'impacteur-mail', titre: 'X', objectif: 'Y', type: 'Boucle', critere: 'Z', brief: { observe: 'a' } });
+  assert.equal(r.isError, true);
+  assert.match(r.out, /obligatoire/);
 
-  r = await mcp({ jsonrpc: '2.0', id: 4, method: 'inexistant' });
-  assert.equal(r.json.error.code, -32601);
+  r = await call('proposer_action', {
+    projet: 'impacteur-mail',
+    titre: 'Chercher les adresses chez l’éditeur',
+    objectif: 'Trouver plus d’adresses',
+    type: 'Boucle',
+    critere: 'Fiches avec adresse',
+    idees: ['Lister les éditeurs', 'Tester 20 fiches'],
+    brief: BRIEF,
+  });
+  assert.equal(r.isError, false);
+  const newId = r.out.action;
 
+  // Elle attend Walid : impossible de la faire tourner.
+  r = await call('ecrire_tour', { projet: 'impacteur-mail', action: newId, constat: 'a', decision: 'b' });
+  assert.equal(r.isError, true);
+  assert.match(r.out, /validation de Walid/);
+
+  // Le document est bien celui que lit l’interface : action rouge, en attente.
+  const doc = JSON.parse(db.getDoc('project:impacteur-mail').value);
+  const t = doc.tasks.find((x) => x.id === newId);
+  assert.equal(t.proposalStatus, 'pending');
+  assert.equal(t.brief.ifNothing, BRIEF.si_rien);
+  assert.ok(doc.priorities.includes(newId));
+
+  // Tour sur une boucle permanente + idée qui avance.
+  r = await call('ecrire_tour', {
+    projet: 'impacteur-mail',
+    action: 'impacteur-mail-stats',
+    constat: '7 jours : 52 envois, 19 ouvertures (37 %).',
+    decision: 'Garder l’objet actuel une semaine de plus.',
+    idees: [{ index: 0, stade: 'Exécution', commentaire: 'Relevé fait.' }],
+  });
+  assert.equal(r.isError, false);
+  r = await call('noter_lecon', {
+    projet: 'impacteur-mail',
+    action: 'impacteur-mail-stats',
+    type: 'Réussites',
+    titre: 'Objet court',
+    texte: '37 % d’ouverture sur 52 envois avec un objet de moins de 6 mots.',
+    lecon: 'Garder des objets courts.',
+  });
+  const lessonId = r.out.id;
+  r = await call('changer_statut_lecon', { projet: 'impacteur-mail', lecon: lessonId, statut: 'confirmée', raison: '41 % sur 120 envois.' });
+  assert.equal(r.isError, false);
+  r = await call('signaler_acces', { projet: 'impacteur-mail', action: 'impacteur-mail-mails', idee: 0, outil: 'Gmail — Frexit', message: 'Pour lire les réponses.' });
+  assert.equal(r.isError, false);
+
+  r = await call('lire_projet', { projet: 'impacteur-mail' });
+  const stats = r.out.actions.find((a) => a.id === 'impacteur-mail-stats');
+  assert.equal(stats.idees[0].stade, 'Exécution');
+  assert.equal(stats.derniers_tours[0].aiDecision, 'Garder l’objet actuel une semaine de plus.');
+  assert.equal(r.out.memoire.find((m) => m.id === lessonId).statut, 'confirmée');
+  assert.equal(r.out.actions.find((a) => a.id === 'impacteur-mail-mails').couleur, 'rouge');
+
+  // Modification : l’action s’arrête.
+  r = await call('proposer_modification', { projet: 'impacteur-mail', action: 'impacteur-mail-veille', brief: BRIEF });
+  assert.equal(r.isError, false);
+  r = await call('ecrire_tour', { projet: 'impacteur-mail', action: 'impacteur-mail-veille', constat: 'a', decision: 'b' });
+  assert.equal(r.isError, true);
+
+  const list = (await call('lister_projets', {})).out;
+  assert.equal(list.find((p) => p.projet === 'impacteur-mail').couleur, 'rouge');
+  assert.equal(list.find((p) => p.projet === 'extrait-politique').couleur, 'gris');
+});
+
+test('connecteur : lecture d’une facture déposée', async () => {
   const { cookie } = await login();
-  const pings = await (await fetch(base + '/api/mcp-pings', { headers: { Cookie: cookie } })).json();
-  assert.equal(pings[0].source, 'test auto');
+  const png = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 1, 2, 3]);
+  const up = await (await fetch(base + '/api/files', { method: 'POST', headers: { Cookie: cookie, 'X-File-Name': 'ovh.png' }, body: png })).json();
+  const cur = await (await fetch(base + '/api/docs/money', { headers: { Cookie: cookie } })).json();
+  const money = { expenses: [{ id: 'e1', name: 'VPS YouTube (OVH)', amount: 12, cur: '€', freq: 'mois', project: 'Commun (plusieurs projets)' }], invoices: [{ id: 'f1', file: 'ovh.png', fileId: up.id, state: 'lecture' }], corrections: [], ai: [] };
+  await put(cookie, 'money', JSON.stringify(money), cur.version);
 
-  const wk = await fetch(base + '/.well-known/oauth-protected-resource');
-  assert.equal(wk.status, 404);
-  const get = await fetch(base + '/mcp-test');
-  assert.equal(get.status, 405);
+  let r = await call('factures_a_lire', {});
+  assert.equal(r.out.factures[0].id, 'f1');
+  r = await call('lire_facture', { id: 'f1' });
+  assert.equal(r.raw.content[0].type, 'image');
+  r = await call('enregistrer_facture', { id: 'f1', etat: 'lue', fournisseur: 'OVH', montant: 12, devise: '€', date: '2026-11-01', correspond_a: 'VPS YouTube (OVH)' });
+  assert.equal(r.isError, false);
+  const after = JSON.parse(db.getDoc('money').value);
+  assert.equal(after.invoices[0].state, 'lue');
+  assert.equal(after.expenses[0].invoice.date, '2026-11-01');
 });

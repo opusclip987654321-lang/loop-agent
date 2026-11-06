@@ -25,6 +25,14 @@ export function openDb(dataDir) {
       created_at INTEGER NOT NULL,
       expires_at INTEGER NOT NULL
     );
+    CREATE TABLE IF NOT EXISTS agent_keys (
+      id         TEXT PRIMARY KEY,
+      label      TEXT NOT NULL,
+      key_hash   TEXT NOT NULL UNIQUE,
+      created_at TEXT NOT NULL,
+      last_used  TEXT,
+      revoked_at TEXT
+    );
     CREATE TABLE IF NOT EXISTS mcp_pings (
       at     TEXT NOT NULL,
       source TEXT NOT NULL
@@ -55,6 +63,11 @@ export function openDb(dataDir) {
     addFile: db.prepare('INSERT INTO files (id, name, mime, size, created_at) VALUES (?, ?, ?, ?, ?)'),
     getFile: db.prepare('SELECT id, name, mime, size FROM files WHERE id = ?'),
     delFile: db.prepare('DELETE FROM files WHERE id = ?'),
+    addKey: db.prepare('INSERT INTO agent_keys (id, label, key_hash, created_at) VALUES (?, ?, ?, ?)'),
+    findKey: db.prepare('SELECT id, label FROM agent_keys WHERE key_hash = ? AND revoked_at IS NULL'),
+    touchKey: db.prepare('UPDATE agent_keys SET last_used = ? WHERE id = ?'),
+    listKeys: db.prepare('SELECT id, label, created_at, last_used, revoked_at FROM agent_keys ORDER BY created_at'),
+    revokeKey: db.prepare('UPDATE agent_keys SET revoked_at = ? WHERE id = ? AND revoked_at IS NULL'),
     addPing: db.prepare('INSERT INTO mcp_pings (at, source) VALUES (?, ?)'),
     lastPings: db.prepare('SELECT at, source FROM mcp_pings ORDER BY at DESC LIMIT 50'),
   };
@@ -121,6 +134,20 @@ export function openDb(dataDir) {
     },
     deleteFile(id) {
       q.delFile.run(id);
+    },
+    addAgentKey(id, label, keyHash) {
+      q.addKey.run(id, label, keyHash, new Date().toISOString());
+    },
+    findAgentKey(keyHash) {
+      const k = q.findKey.get(keyHash) || null;
+      if (k) q.touchKey.run(new Date().toISOString(), k.id);
+      return k;
+    },
+    listAgentKeys() {
+      return q.listKeys.all();
+    },
+    revokeAgentKey(id) {
+      return q.revokeKey.run(new Date().toISOString(), id).changes > 0;
     },
     addPing(source) {
       const at = new Date().toISOString();
