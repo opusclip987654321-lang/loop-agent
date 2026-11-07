@@ -256,7 +256,7 @@ function selectProject(id) {
 function openProjectPicker() {
   modal(
     'Choisir un projet',
-    `<p class="note">Un point doré signale que quelque chose t’attend dans le projet. Un point gris : projet en pause.</p><div class="grid">${projects
+    `<p class="note">Un point rouge signale qu’une action attend ta décision.</p><div class="grid">${projects
       .map((p) => {
         let c = p.id === projectId ? projectColor(data) : projectColorFor(p.id);
         return `<button style="text-align:left;padding:17px" onclick="selectProject('${p.id}')"><span class="tiny">${colorDot(c)}${esc(p.type)}</span><h3>${esc(p.name)}</h3><p class="note">${esc(p.description)}</p>${p.id === projectId ? pill('Projet actif') : ''}</button>`;
@@ -285,7 +285,7 @@ function pill(s) {
     ? 'green'
     : /Flop|Rejeté|Bloqué/.test(s)
       ? 'red'
-      : /attente|À valider|Proposée/.test(s)
+      : /moyenne|attente|À valider|Proposée|En cours/.test(s)
         ? 'yellow'
         : 'gold';
   return `<span class="badge ${c}">${esc(s)}</span>`;
@@ -311,21 +311,11 @@ document.getElementById('dialog').addEventListener('click', (e) => {
   if (e.target.id === 'dialog') closeDialog();
 });
 function head(title, desc, action = '') {
-  return `<div class="heading"><div><h1>${title}</h1><p class="intro">${desc}</p></div>${action}</div>`;
+  return `<div class="heading"><div><div class="tiny" style="margin-bottom:8px">${esc(projectDef.name.toUpperCase())} / ÉTAPE 0${page + 1}</div><h1>${title}</h1><p class="intro">${desc}</p></div>${action}</div>`;
 }
 function cardTask(t) {
-  const w = waitReasons(t);
-  const kinds = w.map((x) => x.kind);
-  const cls = taskColor(t) === 'rouge' ? 'cwait' : isPaused(t) ? 'cgrey' : '';
-  let acts = '';
-  if (kinds.includes('objectif')) acts += btn('Fixer l’objectif', `editObjective('${t.id}')`, 'wait');
-  else if (kinds.includes('objectif-suggere')) acts += btn('Confirmer l’objectif', `editObjective('${t.id}')`, 'wait');
-  acts += btn('Ouvrir', `detail('${t.id}')`);
-  return `<article class="card acard ${cls}">${cardHead(t)}<h3>${esc(t.title)}</h3>${
-    t.goal ? `<p class="adesc">${esc(t.goal)}</p>` : ''
-  }${t.targetFollowers ? `<p class="note">Cible : ${Number(t.targetFollowers).toLocaleString('fr-FR')} abonnés</p>` : ''}${stopBanner(t)}${proposalCard(
-    t,
-  )}<div class="actions">${acts}</div></article>`;
+  let proposal = stopBanner(t) + proposalCard(t);
+  return `<article class="card ${taskColor(t) === 'rouge' ? 'cred' : taskColor(t) === 'gris' ? 'cgrey' : 'cgreen'}"><div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap"><span class="tiny">${colorDot(taskColor(t))}${t.origin === 'Walid' ? 'Ajouté par Walid' : 'Proposé par ' + esc(t.origin)}</span><div class="toolbar" style="margin:0">${pill(t.status)}<span class="badge">${t.type === 'Boucle' ? '🔁 Boucle' : '● Ponctuelle'}</span>${autonomyBadge(t)}<span class="badge gold">${esc(t.category || 'À classer')}</span></div></div><h3>${esc(t.title)}</h3><p class="muted">${esc(t.goal)}</p>${t.targetFollowers ? `<p><strong>Cible :</strong> ${Number(t.targetFollowers).toLocaleString('fr-FR')} abonnés</p>` : ''}${proposal}<div class="meta"><div><span>Responsable</span>${esc(t.owner)}</div><div><span>Révision prévue</span>${esc(t.reviewCadence || (t.type === 'Ponctuelle' || t.format ? 'Chaque jour' : 'Chaque lundi'))}</div></div><div class="actions">${btn('Ouvrir l’action ↗', "detail('TID')".replace('TID', t.id))}</div></article>`;
 }
 function setTaskProposal(id, approved) {
   let t = task(id);
@@ -370,57 +360,21 @@ function toggleTelegramAlerts() {
       : 'Simulation des alertes Telegram désactivée.',
   );
 }
-// Phrase du bandeau : ce qui attend, regroupé par nature.
-function waitingSummary(tasks) {
-  const n = (k) => tasks.filter((t) => waitReasons(t).some((x) => x.kind === k)).length;
-  const parts = [];
-  const prop = n('proposition');
-  if (prop) parts.push(prop > 1 ? `${prop} propositions de l’agent attendent ta réponse.` : 'Une proposition de l’agent attend ta réponse.');
-  const first = n('premier');
-  if (first) parts.push(first > 1 ? `${first} premiers résultats sont à valider.` : 'Un premier résultat est à valider.');
-  const stop = n('modification');
-  if (stop) parts.push(stop > 1 ? `${stop} actions sont arrêtées en attendant ta décision.` : 'Une action est arrêtée en attendant ta décision.');
-  const idea = n('idee');
-  if (idea) parts.push(idea > 1 ? `Des idées attendent ta décision dans ${idea} actions.` : 'Des idées attendent ta décision dans une action.');
-  const obj = n('objectif');
-  if (obj) parts.push(`${countWord(obj, 'action tourne', 'actions tournent')} sans objectif : l’agent ne peut rien en conclure.`);
-  const sug = n('objectif-suggere');
-  if (sug) parts.push(sug > 1 ? `${sug} objectifs suggérés par l’agent sont à confirmer.` : 'Un objectif suggéré par l’agent est à confirmer.');
-  const rev = n('constat');
-  if (rev) parts.push(rev > 1 ? `${rev} constats attendent ta validation en Révision.` : 'Un constat attend ta validation en Révision.');
-  return parts.join(' ');
-}
-function countWord(n, one, many) {
-  const w = ['', 'Une', 'Deux', 'Trois', 'Quatre', 'Cinq', 'Six', 'Sept', 'Huit', 'Neuf', 'Dix'];
-  return n === 1 ? `${w[1]} ${one}` : `${w[n] || n} ${many}`;
-}
 function planning() {
-  const all = visibleTasks('planification');
-  const waiting = all.filter((t) => taskColor(t) === 'rouge');
-  const rank = (t) => (taskColor(t) === 'rouge' ? 0 : t.proposalStatus === 'rejected' ? 3 : isPaused(t) ? 2 : 1);
-  let list = all
-    .filter(
-      (t) =>
-        (categoryFilter === 'Toutes' || (categoryFilter === 'À traiter' ? taskColor(t) === 'rouge' : t.category === categoryFilter)) &&
-        (sourceFilter === 'Toutes' ||
-          (sourceFilter === 'Mes actions' && t.origin === 'Walid') ||
-          (sourceFilter === 'Propositions des agents' && t.origin !== 'Walid')),
-    )
-    .sort((a, b) => rank(a) - rank(b));
-  const used = categories.filter((c) => all.some((t) => t.category === c));
-  const banner = waiting.length
-    ? `<section class="strip wait banner"><div><strong>${countWord(waiting.length, 'chose t’attend ici', 'choses t’attendent ici')}</strong><p>${esc(
-        waitingSummary(waiting),
-      )}</p></div>${categoryFilter === 'À traiter' ? btn('Tout afficher', "setCategory('Toutes')") : btn('Traiter maintenant', "setCategory('À traiter')", 'wait')}</section>`
-    : '';
-  const filters = ['Toutes', ...(waiting.length ? ['À traiter'] : []), ...used];
+  let list = visibleTasks('planification').filter(
+    (t) =>
+      (categoryFilter === 'Toutes' || t.category === categoryFilter) &&
+      (sourceFilter === 'Toutes' ||
+        (sourceFilter === 'Mes actions' && t.origin === 'Walid') ||
+        (sourceFilter === 'Propositions des agents' && t.origin !== 'Walid')),
+  );
   return (
-    head('Planification', 'Les actions à mener pour ' + esc(projectDef.name) + '.', btn('Ajouter une action', 'newTask()')) +
-    `${banner}${ideaPanel()}<div class="toolbar">${filters
-      .map((f) => btn(f === 'À traiter' ? `À traiter · ${waiting.length}` : f, `setCategory('${f}')`, (categoryFilter === f ? 'active ' : '') + (f === 'À traiter' ? 'c-wait' : '')))
-      .join('')}<span class="grow"></span>${['Toutes', 'Mes actions', 'Propositions des agents']
-      .map((f) => btn(f === 'Toutes' ? 'Toutes origines' : f, `setSource('${f}')`, 'small ' + (sourceFilter === f ? 'active' : '')))
-      .join('')}</div><div class="cards">${list.map(cardTask).join('') || '<div class="empty">Aucune action ici.</div>'}</div>`
+    head(
+      'Planification',
+      'Définir les actions à mener pour ' + projectDef.name + '.',
+      btn('+ Ajouter une action', 'newTask()', 'primary'),
+    ) +
+    `${telegramPanel()}${ideaPanel()}<h2>Actions du projet</h2><div class="toolbar">${['Toutes', ...categories].map((f) => btn(f, `setCategory('${f}')`, categoryFilter === f ? 'active' : '')).join('')}</div><div class="toolbar"><span class="tiny">ORIGINE</span>${['Toutes', 'Mes actions', 'Propositions des agents'].map((f) => btn(f, `setSource('${f}')`, sourceFilter === f ? 'active' : '')).join('')}<span class="grow"></span><span class="note">${list.length} actions</span></div><div class="grid">${list.map(cardTask).join('') || '<div class="empty">Aucune action dans ce domaine.</div>'}</div>`
   );
 }
 function setIdea(id, status) {
@@ -498,7 +452,7 @@ function taskIdeaCards(t, showTools = false) {
             approval = typeof idea === 'string' ? 'approved' : idea.approvalStatus || 'approved';
           let decision =
             isAI && approval === 'pending'
-              ? `<div class="strip"><strong>Idée proposée par l’IA · validation requise</strong><div class="actions"><button class="good" onclick="setTaskIdeaApproval('${t.id}',${i},true,${showTools})">Valider l’idée</button><button class="danger" onclick="setTaskIdeaApproval('${t.id}',${i},false,${showTools})">Refuser</button></div></div>`
+              ? `<div class="strip"><strong>Idée proposée par l’IA · validation requise</strong><div class="actions"><button class="good" onclick="setTaskIdeaApproval('${t.id}',${i},true,${showTools})">✅ Valider l’idée</button><button class="danger" onclick="setTaskIdeaApproval('${t.id}',${i},false,${showTools})">❌ Refuser</button></div></div>`
               : isAI && approval === 'approved'
                 ? `<p class="note green">Idée validée par Walid · l’IA peut la lancer quand elle le décide.</p>`
                 : isAI
@@ -654,59 +608,34 @@ function ideaAccessRows(t) {
     .join('');
 }
 function executionCard(t) {
-  const ideas = (t.ideas || []).length;
-  const last = (t.reviewHistory || []).find((h) => h.by === 'agent' || h.aiObservation) || {};
-  const extra =
-    t.format === 'Vidéo longue' ? btn('Décliner en formats courts', `recycleContent('${t.id}')`) : '';
-  return `<article class="card acard">${cardHead(t, 'execution')}<h3>${esc(t.title)}</h3><p class="adesc">${
-    ideas ? `${ideas} idée${ideas > 1 ? 's' : ''} en cours. ` : ''
-  }${last.aiObservation ? esc(last.aiObservation) : esc(t.goal || '')}</p>${ideaAccessRows(t)}<div class="actions">${btn(
-    'Ouvrir',
-    `detail('${t.id}',true)`,
-  )}${btn('Mettre en pause', `toggleTaskPause('${t.id}')`)}${extra}</div></article>`;
+  let state = data.queue[t.id] || t.status;
+  let buttons =
+    btn(
+      t.paused ? '▶ Reprendre cette tâche' : 'Ⅱ Mettre cette tâche en pause',
+      "toggleTaskPause('TID')".replace('TID', t.id),
+      t.paused ? 'primary' : '',
+    ) +
+    btn('Détail, outils et validation', "detail('TID',true)".replace('TID', t.id), 'primary') +
+    (t.format === 'Vidéo longue'
+      ? btn('Décliner en formats courts', "recycleContent('TID')".replace('TID', t.id))
+      : '');
+  return `<article class="card"><div class="toolbar" style="margin:0 0 10px">${pill(state)}${t.paused ? pill('Tâche en pause') : ''}<span class="badge gold">${esc(t.category)}</span><span class="badge">${esc(t.format || 'Action')}</span></div><h2>${esc(t.title)}</h2><p class="muted">${esc(t.goal)}</p>${ideaAccessRows(t)}<p class="tiny">${(t.ideas || []).length} idées proposées · Responsable : ${esc(t.owner)}</p><div class="actions">${buttons}</div></article>`;
 }
 function toggleTaskPause(id) {
   let t = task(id);
   if (!t) return;
-  const resume = isPaused(t);
-  t.paused = !resume;
-  if (resume && t.status === 'En pause') t.status = 'En cours';
-  if (!resume) t.pausedAt = new Date().toISOString();
+  t.paused = !t.paused;
   save();
   render();
-  notify(resume ? 'Action reprise.' : 'Action mise en pause : rien ne tourne en attendant.');
+  notify(t.paused ? 'Tâche mise en pause.' : 'Tâche reprise.');
 }
 function execution() {
-  const live = data.tasks.filter(isLive);
-  const late = live.filter(turnLate);
-  const stopped = data.tasks
-    .filter((t) => t.proposalStatus !== 'pending' && t.proposalStatus !== 'rejected' && (t.done || isPaused(t)))
-    .sort((a, b) => String(b.doneAt || b.pausedAt || '').localeCompare(String(a.doneAt || a.pausedAt || '')));
-  const oldest = late.reduce((a, t) => Math.max(a, daysSince(t.lastAgentTurn || t.decidedAt || t.proposedAt) || 0), 0);
-  const banner = late.length
-    ? `<section class="strip banner down"><div><strong>${
-        late.length === live.length ? `Aucun tour depuis ${oldest} jours` : `${countWord(late.length, 'action n’a', 'actions n’ont')} pas tourné à temps`
-      }</strong><p>${late
-        .map((t) => `${esc(t.title)} : ${t.lastAgentTurn ? 'dernier tour ' + agoText(t.lastAgentTurn) : 'jamais tourné'}`)
-        .join(' · ')}</p></div></section>`
-    : '';
-  const quiet = stopped.length
-    ? `<h2 class="section-title" style="color:var(--text-3)">Ce qui ne tourne plus <span class="note">${stopped.length} action${
-        stopped.length > 1 ? 's' : ''
-      }</span></h2><p class="note" style="margin:-6px 0 14px">Elles restent lisibles ici, mais ne comptent plus dans ce qui travaille. Leurs résultats et leurs leçons sont conservés.</p><div class="quiet-list">${stopped
-        .map(
-          (t) =>
-            `<div><span><span class="qt">${esc(t.title)}</span><span class="note"> — ${
-              t.done ? 'terminée' + (t.doneAt ? ' le ' + shortDay(t.doneAt) : '') : 'en pause' + (t.pausedAt ? ' depuis le ' + shortDay(t.pausedAt) : '')
-            }</span></span>${t.done ? `<a href="#memoire">Ce qu’on en a appris</a>` : btn('Reprendre', `toggleTaskPause('${t.id}')`)}</div>`,
-        )
-        .join('')}</div>`
-    : '';
   return (
-    head('Exécution', 'Ce qui tourne en ce moment, et quand chaque action a travaillé pour la dernière fois.') +
-    `${banner}<h2 class="section-title">Ce qui tourne <span class="note">${live.length} action${live.length > 1 ? 's' : ''}</span></h2><div class="cards" style="margin-bottom:36px">${
-      live.map(executionCard).join('') || '<div class="empty">Rien ne tourne en ce moment.</div>'
-    }</div>${quiet}`
+    head('Exécution', 'Suivre les tâches, leurs outils, les validations et les résultats du projet.') +
+    `<h2>Tâches d’exécution</h2><div class="grid">${data.tasks
+      .filter((t) => t.proposalStatus !== 'pending' && t.proposalStatus !== 'rejected')
+      .map(executionCard)
+      .join('')}</div><p class="note">La pause et les états sont propres à chaque tâche.</p>`
   );
 }
 function mediaPreview(t) {
@@ -717,7 +646,7 @@ function detail(id, showTools = false) {
   if (!t) return;
   let ideaList = taskIdeaCards(t, showTools),
     youtube = t.format
-      ? `<section class="card space"><h3>Aperçu avant publication</h3>${mediaPreview(t)}<div class="grid"><div><h3>Hook</h3><p>${esc(t.hook || 'Hook à préparer')}</p><h3>Script</h3><p style="white-space:pre-line">${esc(t.script || 'Script à préparer par l’agent.')}</p></div><div><h3>Miniature</h3><div class="video-preview"><div><div class="play">▧</div><strong>${esc(t.visual || 'Proposition de miniature')}</strong></div></div><h3>Voix et fichier média</h3><p>${esc(t.voice || 'Voix à définir')}</p><audio controls style="width:100%"></audio><p class="note">Lecteur factice : aucun fichier audio/vidéo réel n’est attaché.</p></div></div><label>État de la file</label><select id="q-${t.id}" onchange="setQueue('${t.id}',this.value)">${queueStates.map((s) => `<option ${(data.queue[t.id] || t.status) === s ? 'selected' : ''}>${s}</option>`).join('')}</select><div class="actions">${btn('Valider et programmer sur YouTube', `approveVideo('${t.id}')`, 'good')}${btn('🔄 Demander une réécriture/modification à l’agent', `rewriteVideo('${t.id}')`)}${btn('Rejeter', `rejectVideo('${t.id}')`, 'danger')}</div><p class="note">La validation modifie uniquement l’état local ; elle ne programme aucune vraie vidéo.</p></section>`
+      ? `<section class="card space"><h3>Aperçu avant publication</h3>${mediaPreview(t)}<div class="grid"><div><h3>Hook</h3><p>${esc(t.hook || 'Hook à préparer')}</p><h3>Script</h3><p style="white-space:pre-line">${esc(t.script || 'Script à préparer par l’agent.')}</p></div><div><h3>Miniature</h3><div class="video-preview"><div><div class="play">▧</div><strong>${esc(t.visual || 'Proposition de miniature')}</strong></div></div><h3>Voix et fichier média</h3><p>${esc(t.voice || 'Voix à définir')}</p><audio controls style="width:100%"></audio><p class="note">Lecteur factice : aucun fichier audio/vidéo réel n’est attaché.</p></div></div><label>État de la file</label><select id="q-${t.id}" onchange="setQueue('${t.id}',this.value)">${queueStates.map((s) => `<option ${(data.queue[t.id] || t.status) === s ? 'selected' : ''}>${s}</option>`).join('')}</select><div class="actions">${btn('✅ Valider et programmer sur YouTube', `approveVideo('${t.id}')`, 'good')}${btn('🔄 Demander une réécriture/modification à l’agent', `rewriteVideo('${t.id}')`)}${btn('❌ Rejeter', `rejectVideo('${t.id}')`, 'danger')}</div><p class="note">La validation modifie uniquement l’état local ; elle ne programme aucune vraie vidéo.</p></section>`
       : '';
   modal(
     t.title,
@@ -970,54 +899,15 @@ function recycleContent(sourceId) {
     notify('Tâche de recyclage ajoutée à la planification.');
   };
 }
-// Mémoire rangée par projet (CADRAGE §10) : chaque leçon dit l'action qui l'a produite.
 function memory() {
-  const mems = data.memories || [];
-  const count = (st) => mems.filter((m) => lessonState(m) === st).length;
-  const f = [
-    ['Toutes', 'Toutes', ''],
-    ['confirmée', `Confirmées · ${count('confirmée')}`, 'c-up'],
-    ['à tester', `À tester · ${count('à tester')}`, ''],
-    ['invalidée', `Invalidées · ${count('invalidée')}`, 'c-down'],
-  ];
-  const learning = new Set(mems.map((m) => m.taskId));
-  const silent = data.tasks.filter(
-    (t) => t.proposalStatus !== 'pending' && t.proposalStatus !== 'rejected' && !t.done && !learning.has(t.id),
-  );
-  const since = (t) => {
-    const d = daysSince(t.decidedAt || t.proposedAt);
-    if (!t.lastAgentTurn) return 'aucun tour enregistré';
-    if (d === null) return 'dernier tour ' + agoText(t.lastAgentTurn);
-    return d < 7 ? `tourne depuis ${d || 1} jour${d > 1 ? 's' : ''}` : `tourne depuis ${Math.floor(d / 7)} semaine${d >= 14 ? 's' : ''}`;
-  };
   return (
     head(
       'Mémoire',
-      'Ce que ce projet a appris. Une leçon se teste, puis se confirme ou s’invalide — c’est ce qui fait la différence entre une intuition et une règle.',
+      'Retrouver les enseignements tirés de chaque action du projet.',
       btn('Règles du projet', 'editGoldenRules()'),
     ) +
-    `<div class="toolbar" style="margin:0 0 14px">${f
-      .map(([k, label, c]) => btn(label, `setMemoryFilter('${k}')`, (memoryFilter === k ? 'active ' : '') + c))
-      .join('')}</div><input placeholder="Rechercher une leçon ou une action…" value="${esc(window.query || '')}" oninput="searchMemory(this.value)" style="max-width:520px"><div class="cards" id="memoryCards" style="margin:18px 0 36px">${memoryCards()}</div>${
-      silent.length
-        ? `<h2 class="section-title">Les actions qui n’ont encore rien appris</h2><p class="note" style="margin:-6px 0 14px">Elles tournent, mais aucune leçon n’en est sortie. C’est normal au début, inquiétant après plusieurs semaines.</p><div class="quiet-list">${silent
-            .map((t) => `<div><span style="color:var(--text-2)">${esc(t.title)}</span><span class="note">${since(t)}</span></div>`)
-            .join('')}</div>`
-        : ''
-    }`
+    `<p class="note">Ouvre une action pour consulter ses réussites et ses échecs datés. La mémoire affichée reste propre à ${esc(projectDef.name)}.</p><input placeholder="Rechercher une action ou un enseignement…" value="${esc(window.query || '')}" oninput="searchMemory(this.value)"><div class="grid" id="memoryCards" style="margin-top:18px">${memoryCards()}</div>`
   );
-}
-function setMemoryFilter(f) {
-  memoryFilter = f;
-  render();
-}
-function setLessonStateAt(i, st) {
-  const m = (data.memories || [])[i];
-  if (!m) return;
-  m.state = st;
-  save();
-  render();
-  notify('Leçon marquée « ' + st + ' ».');
 }
 function memoryMatches(m, q) {
   return [m.title, m.text, m.lesson, m.kind, m.tag, m.cycle, m.date].join(' ').toLowerCase().includes(q.toLowerCase());
@@ -1038,33 +928,19 @@ function memoryRecordMarkup(m, ti, idx) {
   return `<article class="memory-record"><div class="memory-date">${m.date ? formatReviewDate(m.date) : esc(m.cycle || 'Date à préciser')} · ${esc(m.tag || m.kind)} <span class="lessonstate ${cls}">${esc(st)}</span></div><strong>${esc(m.title)}</strong><p class="muted">${esc(m.text)}</p><p class="note">Leçon à réutiliser : ${esc(m.lesson || 'À compléter')}</p>${ctrls}</article>`;
 }
 function memoryCards() {
-  const q = (window.query || '').toLowerCase();
-  const mems = (data.memories || []).map((m, i) => ({ m, i }));
-  const list = mems
-    .filter(({ m }) => memoryFilter === 'Toutes' || lessonState(m) === memoryFilter)
-    .filter(({ m }) => {
-      if (!q) return true;
-      const t = task(m.taskId);
-      return memoryMatches(m, q) || (t && t.title.toLowerCase().includes(q));
-    })
-    .sort((a, b) => String(b.m.date || '').localeCompare(String(a.m.date || '')));
-  const tone = { confirmée: 'up', invalidée: 'down', 'à tester': 'idle' };
-  const label = { confirmée: 'Confirmée', invalidée: 'Invalidée — ça ne venait pas de là', 'à tester': 'À tester' };
+  let q = (window.query || '').toLowerCase();
   return (
-    list
-      .map(({ m, i }) => {
-        const st = lessonState(m);
-        const t = task(m.taskId);
-        const moves = LESSON_STATES.filter((x) => x !== st)
-          .map((x) => btn(x === 'confirmée' ? 'Confirmer' : x === 'invalidée' ? 'Invalider' : 'Remettre à tester', `setLessonStateAt(${i},'${x}')`, 'small'))
-          .join('');
-        return `<article class="card acard${st === 'invalidée' ? ' cgrey' : ''}"><div class="ahead"><span class="astate c-${tone[st]}">${label[st]}</span><span class="note">${
-          m.date ? shortDay(m.date) + ' · ' : ''
-        }${esc(t ? t.title : m.tag || m.kind || '')}</span></div><h3>${esc(m.title || 'Leçon')}</h3><p class="adesc" style="-webkit-line-clamp:5">${esc(m.text || '')}</p>${
-          m.lesson ? `<p class="note" style="margin:10px 0 0">Ce qu’on en retient : ${esc(m.lesson)}</p>` : ''
-        }<div class="actions">${moves}</div></article>`;
+    data.tasks
+      .filter((t) => t.proposalStatus !== 'pending' && t.proposalStatus !== 'rejected')
+      .filter((t) => {
+        let items = (data.memories || []).filter((m) => m.taskId === t.id);
+        return !q || t.title.toLowerCase().includes(q) || items.some((m) => memoryMatches(m, q));
       })
-      .join('') || '<div class="empty">Aucune leçon ici pour l’instant.</div>'
+      .map((t) => {
+        let items = (data.memories || []).filter((m) => m.taskId === t.id);
+        return `<article class="card"><span class="tiny">ACTION</span><h2>${esc(t.title)}</h2><p class="note">${items.length ? items.length + ' enseignement(s) mémorisé(s)' : 'Aucun enseignement mémorisé pour le moment.'}</p><div class="actions">${btn('Ouvrir la mémoire de l’action', `openActionMemory('${t.id}')`, 'primary')}</div></article>`;
+      })
+      .join('') || '<div class="empty">Aucune action ne correspond à cette recherche.</div>'
   );
 }
 function openActionMemory(id) {
@@ -1090,49 +966,16 @@ function searchMemory(q) {
   document.getElementById('memoryCards').innerHTML = memoryCards();
 }
 function priorities() {
-  const order = (data.priorities || [])
-    .map((id) => ({ t: task(id) }))
-    .filter(({ t }) => t && t.proposalStatus !== 'pending' && t.proposalStatus !== 'rejected' && !t.done);
-  const line = (t) => {
-    const st = stateLine(t, 'execution');
-    const w = waitReasons(t);
-    if (w.length) return `<div class="c-wait">${esc(w[0].text)}</div>`;
-    const prog = t.objective && typeof objectiveProgress === 'function' ? objectiveProgress(t) : '';
-    return `<div class="c-${st.tone === 'up' ? 'idle' : st.tone}">${esc(
-      [t.type === 'Boucle' ? 'Boucle ' + (cadenceDays(t) === 1 ? 'quotidienne' : 'hebdomadaire') : 'Ponctuelle', st.text.toLowerCase(), prog].filter(Boolean).join(' · '),
-    )}</div>`;
-  };
   return (
-    head('Priorités', 'L’ordre dans lequel l’agent traite les actions. Ce qui est en haut passe en premier quand le temps manque.') +
-    `<ol class="prio">${
-      order
-        .map(
-          ({ t }, n) =>
-            `<li><span class="rank">${n + 1}</span><div class="grow"><div class="pt">${esc(t.title)}</div>${line(t)}</div><div class="pm"><button class="small" aria-label="Monter ${esc(
-              t.title,
-            )}" ${n === 0 ? 'disabled' : ''} onclick="moveVisiblePriority('${t.id}',-1)">↑</button><button class="small" aria-label="Descendre ${esc(t.title)}" ${
-              n === order.length - 1 ? 'disabled' : ''
-            } onclick="moveVisiblePriority('${t.id}',1)">↓</button></div></li>`,
-        )
-        .join('') || '<li class="empty">Aucune action à classer.</li>'
-    }</ol>` +
-    `${projectId === 'vegebudget' || projectDef.kind === 'youtube' ? `<section class="card space"><h2>Quota de production quotidien</h2><div class="grid"><div><label>Nombre de Shorts par jour</label><input type="number" min="0" max="20" value="${esc(data.quota)}" oninput="data.quota=this.value;save();document.getElementById('quotaLabel').textContent=this.value+' Short(s) par jour'"></div><div><label>Cadence sélectionnée</label><div class="metric" id="quotaLabel">${esc(data.quota)} Short(s) par jour</div><p class="note">Modifiable selon les ressources et les résultats.</p></div></div></section>` : ''}${(data.themes || []).length ? `<section class="card space"><h2>Arbitrage des thématiques</h2><p class="note">Réorganise les sujets selon CTR, rétention et abonnements observés dans Vérification.</p>${data.themes.map((th, i) => `<div class="row"><span class="rank">0${i + 1}</span><div class="grow"><strong>${esc(th)}</strong><p class="note">Signal : ${esc(data.themeSignals?.[th] || (i === 0 ? 'résultat à confirmer' : i === 1 ? 'test à poursuivre' : 'données à compléter'))}</p></div><button class="small" ${i === 0 ? 'disabled' : ''} onclick="moveTheme(${i},-1)">↑</button><button class="small" ${i === data.themes.length - 1 ? 'disabled' : ''} onclick="moveTheme(${i},1)">↓</button></div>`).join('')}</section>` : ''}`
+    head('Priorités', 'Choisir l’ordre des actions et les sujets à traiter pour ' + projectDef.name + '.') +
+    `${projectId === 'vegebudget' || projectDef.kind === 'youtube' ? `<section class="card space"><h2>Quota de production quotidien</h2><div class="grid"><div><label>Nombre de Shorts par jour</label><input type="number" min="0" max="20" value="${esc(data.quota)}" oninput="data.quota=this.value;save();document.getElementById('quotaLabel').textContent=this.value+' Short(s) par jour'"></div><div><label>Cadence sélectionnée</label><div class="metric" id="quotaLabel">${esc(data.quota)} Short(s) par jour</div><p class="note">Modifiable selon les ressources et les résultats.</p></div></div></section>` : ''}<section class="card space"><h2>Arbitrage des thématiques</h2><p class="note">Réorganise les sujets selon CTR, rétention et abonnements observés dans Vérification.</p>${data.themes.map((th, i) => `<div class="row"><span class="rank">0${i + 1}</span><div class="grow"><strong>${esc(th)}</strong><p class="note">Signal : ${esc(data.themeSignals?.[th] || (i === 0 ? 'résultat à confirmer' : i === 1 ? 'test à poursuivre' : 'données à compléter'))}</p></div><button class="small" ${i === 0 ? 'disabled' : ''} onclick="moveTheme(${i},-1)">↑</button><button class="small" ${i === data.themes.length - 1 ? 'disabled' : ''} onclick="moveTheme(${i},1)">↓</button></div>`).join('')}</section><section class="card"><h2>Ordre des tâches</h2><p class="note">Les tâches restent liées au projet et peuvent être réordonnées.</p>${data.priorities
+      .map((id, i) => {
+        let t = task(id);
+        if (!t || t.proposalStatus === 'pending') return '';
+        return `<div class="row"><span class="rank">${String(i + 1).padStart(2, '0')}</span><div class="grow"><strong>${esc(t.title)}</strong><p class="note">${esc(t.performance || t.status)}</p></div><button class="small" ${i === 0 ? 'disabled' : ''} onclick="movePriority(${i},-1)">↑</button><button class="small" ${i === data.priorities.length - 1 ? 'disabled' : ''} onclick="movePriority(${i},1)">↓</button></div>`;
+      })
+      .join('')}</section>`
   );
-}
-// Échange avec la voisine visible (les actions masquées gardent leur place).
-function moveVisiblePriority(id, d) {
-  const visible = (data.priorities || []).filter((x) => {
-    const t = task(x);
-    return t && t.proposalStatus !== 'pending' && t.proposalStatus !== 'rejected' && !t.done;
-  });
-  const k = visible.indexOf(id);
-  const other = visible[k + d];
-  if (k < 0 || !other) return;
-  const a = data.priorities.indexOf(id),
-    b = data.priorities.indexOf(other);
-  [data.priorities[a], data.priorities[b]] = [data.priorities[b], data.priorities[a]];
-  save();
-  render();
 }
 function moveTheme(i, d) {
   [data.themes[i], data.themes[i + d]] = [data.themes[i + d], data.themes[i]];
@@ -1205,34 +1048,10 @@ function reviewConversationPanel(t, id) {
 function stateIsAwaitingWalid(t) {
   return (t.reviewState || '') === 'En attente de validation par Walid';
 }
-function latestReview(t) {
-  return [...(t.reviewHistory || [])].sort((a, b) => String(b.at || b.date).localeCompare(String(a.at || a.date)))[0];
-}
-// Une carte par action : son dernier compte rendu, et ce qu'il demande.
 function reviewCard(t) {
-  const latest = latestReview(t);
-  const prog = t.objective && typeof objectiveProgress === 'function' ? objectiveProgress(t) : '';
-  let tone, label;
-  if (stateIsAwaitingWalid(t)) [tone, label] = ['wait', 'L’agent attend ta validation'];
-  else if (t.firstRunPending) [tone, label] = ['wait', 'Premier résultat à valider'];
-  else if (/objectif atteint|Fait ✓/.test(prog)) [tone, label] = ['up', 'Objectif atteint'];
-  else if (!latest) [tone, label] = ['idle', 'Rien à juger — aucun compte rendu'];
-  else if (turnLate(t)) [tone, label] = ['down', 'Compte rendu en retard'];
-  else [tone, label] = ['idle', 'Dernier compte rendu'];
-  const when = latest ? shortDay(latest.at || latest.date) + ' · ' : '';
-  const body = latest
-    ? `${esc(latest.aiObservation || '')}${latest.aiDecision ? `<br><span style="color:var(--text-3)">Décision : ${esc(latest.aiDecision)}</span>` : ''}`
-    : turnLate(t)
-      ? 'L’agent n’a rien écrit pour cette action depuis longtemps. Ce n’est pas un échec de l’action : c’est une absence de données.'
-      : 'L’agent n’a pas encore rendu de compte pour cette action.';
-  let acts = '';
-  if (stateIsAwaitingWalid(t)) acts += btn('Valider le constat', `walidApproveReview('${t.id}')`, 'wait');
-  acts += btn('Voir le détail et répondre', `reviewDetail('${t.id}')`);
-  return `<section class="card acard${tone === 'wait' ? ' cwait' : ''}"><div class="ahead"><span class="astate c-${tone}">${label}</span><span class="note">${when}${esc(
-    t.title,
-  )}</span></div><p class="adesc" style="-webkit-line-clamp:6;color:${latest ? 'var(--text-2)' : 'var(--muted)'}">${body}</p>${
-    prog ? `<p class="note" style="margin:10px 0 0">Objectif : ${prog}</p>` : ''
-  }<div class="actions">${acts}</div></section>`;
+  let state = t.reviewState || 'À examiner par l’agent',
+    latest = [...(t.reviewHistory || [])].sort((a, b) => String(b.date).localeCompare(String(a.date)))[0];
+  return `<article class="card"><div class="toolbar" style="margin:0 0 10px">${pill(state)}<span class="badge gold">${esc(reviewCadenceFor(t))}</span><span class="badge">${esc(t.category || 'À classer')}</span></div><h2>${esc(t.title)}</h2><p class="muted">Objectif : ${esc(t.goal)}</p><div class="review-result"><span class="tiny">RÉSULTAT ACTUEL</span>${reviewResultSummary(t)}</div>${latest ? `<div class="review-entry-preview"><span class="tiny">DERNIER CONSTAT DE L’IA · ${formatReviewDate(latest.date)}</span><p>${esc(latest.aiObservation)}</p></div>` : ''}<div class="actions">${btn('Voir le résultat et l’historique', `reviewDetail('${t.id}')`, 'primary')}</div></article>`;
 }
 function reviewDetail(id) {
   let t = task(id);
@@ -1240,7 +1059,7 @@ function reviewDetail(id) {
   let state = t.reviewState || 'À examiner par l’agent';
   let controls =
     state === 'En attente de validation par Walid'
-      ? `<p class="strip">L’IA a terminé son constat et te soumet son analyse pour validation.</p><div class="actions">${btn('Valider le constat', `walidApproveReview('${id}')`, 'good')}</div>`
+      ? `<p class="strip">L’IA a terminé son constat et te soumet son analyse pour validation.</p><div class="actions">${btn('✅ Valider le constat', `walidApproveReview('${id}')`, 'good')}</div>`
       : state === 'Validé par Walid'
         ? `<p class="strip">Tu as validé le dernier constat de l’IA.</p>${btn('Lancer une nouvelle revue', `resetReview('${id}')`)}`
         : state === 'Repris en exécution'
@@ -1313,7 +1132,6 @@ function walidApproveReview(id) {
   if (!t) return;
   t.reviewState = 'Validé par Walid';
   save();
-  render();
   reviewDetail(id);
 }
 function sendReviewMessage(id, requestCorrection = false) {
@@ -1353,12 +1171,14 @@ function resetReview(id) {
   reviewDetail(id);
 }
 function revision() {
-  const list = data.tasks.filter((t) => t.proposalStatus !== 'pending' && t.proposalStatus !== 'rejected');
-  const rank = (t) => (stateIsAwaitingWalid(t) || t.firstRunPending ? 0 : latestReview(t) ? 1 : 2);
-  list.sort((a, b) => rank(a) - rank(b) || String((latestReview(b) || {}).at || '').localeCompare(String((latestReview(a) || {}).at || '')));
   return (
-    head('Révision', 'L’agent contrôle son propre travail et rend ses comptes. Ce qu’il n’a pas pu juger est dit tel quel.') +
-    `<div class="cards">${list.map(reviewCard).join('') || '<div class="empty">Aucune action à réviser.</div>'}</div><details class="card" style="margin-top:26px"><summary style="cursor:pointer;font-weight:600">Consignes de l’agent pour le prochain cycle</summary><p class="note">Après l’examen des résultats, tu peux ajuster les consignes pour le prochain cycle.</p><label>Structure du script</label><textarea id="promptStructure">${esc(data.prompt.structure)}</textarea><label>Ton / style du projet</label><input id="promptTone" value="${esc(data.prompt.tone)}"><label>Outil ou méthode de production</label><input id="promptVoice" value="${esc(data.prompt.voice)}"><div class="actions">${btn('Enregistrer les consignes', 'savePrompt()', 'primary')}</div></details>`
+    head('Révision', 'Examiner le résultat de chaque action. L’agent contrôle son travail avant de te le soumettre.') +
+    `<p class="note">Chaque action a son propre moment de revue : chaque semaine pour les résultats qui prennent du temps, chaque jour pour les actions dont le résultat arrive rapidement.</p><h2>Actions à réviser</h2><div class="grid">${data.tasks
+      .filter((t) => t.proposalStatus !== 'pending' && t.proposalStatus !== 'rejected')
+      .map(reviewCard)
+      .join(
+        '',
+      )}</div><section class="card space" style="margin-top:22px"><h2>Révision des consignes de l’agent</h2><p class="note">Après l’examen des résultats, tu peux ajuster les consignes pour le prochain cycle.</p><label>Structure du script</label><textarea id="promptStructure">${esc(data.prompt.structure)}</textarea><label>Ton / style du projet</label><input id="promptTone" value="${esc(data.prompt.tone)}"><label>Outil ou méthode de production</label><input id="promptVoice" value="${esc(data.prompt.voice)}"><div class="actions">${btn('Enregistrer les consignes', 'savePrompt()', 'primary')}</div></section>`
   );
 }
 function savePrompt() {
@@ -1514,43 +1334,14 @@ function moneyTiles() {
       let d = (new Date() - new Date(e.date)) / 86400000;
       if (d >= 0 && d <= 30) addTo(r30, e.cur, e.amount);
     });
-  // Recharges des 30 jours précédents, pour dire si ça monte ou baisse (par devise, jamais additionnées).
-  let r60 = {};
-  moneyData.expenses
-    .filter((e) => e.freq === 'une fois' && e.date)
-    .forEach((e) => {
-      let d = (new Date() - new Date(e.date)) / 86400000;
-      if (d > 30 && d <= 60) addTo(r60, e.cur, e.amount);
-    });
-  let curs = [...new Set([...Object.keys(r30), ...Object.keys(r60)])];
-  let trendR = '';
-  if (curs.length === 1) {
-    let c = curs[0],
-      diff = Math.round(((r30[c] || 0) - (r60[c] || 0)) * 100) / 100;
-    if (diff)
-      trendR = `<div class="${diff < 0 ? 'c-up' : 'c-down'}">${diff < 0 ? '▼' : '▲'} ${amt(Math.abs(diff), c)} ${diff < 0 ? 'de moins' : 'de plus'} que les 30 jours d’avant</div>`;
-  }
-  let total = moneyData.expenses.length,
-    ok = moneyData.expenses.filter(invoiceUpToDate).length,
-    missing = total - ok;
+  let ok = moneyData.expenses.filter(invoiceUpToDate).length;
   let t = [
-    ['Ce mois-ci', sumFmt(month), '<div class="tiny">abonnements et recharges du mois</div>', ''],
-    ['Fixe chaque mois', sumFmt(fixed), '<div class="tiny">abonnements, domaines lissés sur 12 mois</div>', ''],
-    ['Recharges, 30 derniers jours', sumFmt(r30), trendR || '<div class="tiny">paiements « une fois » récents</div>', ''],
-    !total
-      ? ['Factures', '—', '<div class="tiny">aucune dépense enregistrée</div>', '']
-      : missing
-      ? ['Lignes sans facture à jour', `${missing} sur ${total}`, '<div class="c-wait">à rattacher</div>', 'wait']
-      : ['Factures', `${ok} sur ${total}`, '<div class="c-up">toutes à jour</div>', ''],
+    ['Ce mois-ci', sumFmt(month), 'abonnements + recharges du mois'],
+    ['Fixe par mois', sumFmt(fixed), 'abonnements et domaines lissés'],
+    ['Recharges, 30 derniers jours', sumFmt(r30), 'paiements « une fois » récents'],
+    ['Factures', ok + ' / ' + moneyData.expenses.length + ' à jour', 'lignes couvertes par une facture récente'],
   ];
-  return `<div class="mgrid">${t
-    .map(
-      (x) =>
-        `<section class="tile${x[3] ? ' cwait' : ''}"><div class="tiny">${esc(x[0])}</div><strong class="num${x[3] ? ' c-wait' : ''}" style="font-size:1.5rem;display:block;margin:8px 0 6px">${esc(
-          x[1],
-        )}</strong><div style="font-size:12px">${x[2]}</div></section>`,
-    )
-    .join('')}</div>`;
+  return `<div class="mgrid">${t.map((x) => `<section class="tile"><div class="tiny">${esc(x[0])}</div><strong style="font-size:1.5rem;display:block;margin:8px 0 6px">${esc(x[1])}</strong><div class="tiny">${esc(x[2])}</div></section>`).join('')}</div>`;
 }
 // ---------- factures ----------
 function moneyInvoices() {
@@ -1577,9 +1368,9 @@ function moneyInvoices() {
   let cs = moneyData.corrections.filter((c) => !c.undone),
     cshown = moneyExpand.corr ? cs : cs.slice(0, 2);
   let corr = cs.length
-    ? `<section class="tile" style="margin-top:16px"><strong>Corrigé d’après tes factures</strong>${cshown.map((c) => `<div class="mrow"><div>${esc(c.label)} : ${esc(c.detail)}</div>${btn('Annuler', `undoCorrection('${c.id}')`)}</div>`).join('')}${cs.length > 2 ? `<div class="actions">${btn(moneyExpand.corr ? 'Voir moins' : 'Voir ' + (cs.length - 2) + ' correction(s) de plus', 'toggleMoney("corr")')}</div>` : ''}</section>`
+    ? `<section class="tile" style="margin-top:16px"><strong>✏️ Corrigé d’après tes factures</strong>${cshown.map((c) => `<div class="mrow"><div>${esc(c.label)} : ${esc(c.detail)}</div>${btn('Annuler', `undoCorrection('${c.id}')`)}</div>`).join('')}${cs.length > 2 ? `<div class="actions">${btn(moneyExpand.corr ? 'Voir moins' : 'Voir ' + (cs.length - 2) + ' correction(s) de plus', 'toggleMoney("corr")')}</div>` : ''}</section>`
     : '';
-  return `<section class="tile"><h2 style="margin-top:0">Factures</h2><label class="mdrop" ondragover="event.preventDefault()" ondrop="dropInvoices(event)"><strong>Dépose tes factures ici</strong><div class="tiny">ou clique pour les choisir · PDF ou photo · 10 Mo max</div><input type="file" multiple hidden accept=".pdf,.png,.jpg,.jpeg,.webp,application/pdf,image/png,image/jpeg,image/webp" onchange="uploadInvoices(this.files);this.value=''"></label>${rows}${more}${corr}<p class="tiny" style="margin-top:12px">Claude lit chaque facture à son prochain passage, sur ton abonnement (aucun coût par facture), et la rapproche de ta liste.</p></section>`;
+  return `<section class="tile"><h2 style="margin-top:0">Factures</h2><label class="mdrop" ondragover="event.preventDefault()" ondrop="dropInvoices(event)"><strong>📎 Dépose tes factures ici</strong><div class="tiny">ou clique pour les choisir · PDF ou photo · 10 Mo max</div><input type="file" multiple hidden accept=".pdf,.png,.jpg,.jpeg,.webp,application/pdf,image/png,image/jpeg,image/webp" onchange="uploadInvoices(this.files);this.value=''"></label>${rows}${more}${corr}<p class="tiny" style="margin-top:12px">Claude lit chaque facture à son prochain passage, sur ton abonnement (aucun coût par facture), et la rapproche de ta liste.</p></section>`;
 }
 // ---------- coût IA ----------
 function moneyAI() {
@@ -1634,7 +1425,7 @@ function moneyExpenses() {
         `<button class="${moneyFilter === p ? 'active' : ''}" onclick="setMoneyFilter('${p.replace(/'/g, "\\'")}')">${esc(p)}</button>`,
     )
     .join('');
-  return `<section class="tile"><h2 style="margin-top:0">Dépenses</h2><div class="filters">${filters}</div><input placeholder="Rechercher une dépense…" value="${esc(moneyQuery)}" oninput="setMoneyQuery(this.value)" style="margin:10px 0"><table class="mtbl"><thead><tr><th>Dépense</th><th class="r">Montant</th><th>Quand</th><th>Facture</th><th></th></tr></thead><tbody>${rows || '<tr><td colspan="5">Aucune dépense.</td></tr>'}</tbody></table>${more}<p class="tiny">Les dépenses du même nom (ex. les recharges Anthropic) sont regroupées : clique sur ▸ pour voir chaque paiement.</p><div class="actions">${btn('Ajouter une dépense', 'addExpense()')}</div></section>`;
+  return `<section class="tile"><h2 style="margin-top:0">Dépenses</h2><div class="filters">${filters}</div><input placeholder="Rechercher une dépense…" value="${esc(moneyQuery)}" oninput="setMoneyQuery(this.value)" style="margin:10px 0"><table class="mtbl"><thead><tr><th>Dépense</th><th class="r">Montant</th><th>Quand</th><th>Facture</th><th></th></tr></thead><tbody>${rows || '<tr><td colspan="5">Aucune dépense.</td></tr>'}</tbody></table>${more}<p class="tiny">Les dépenses du même nom (ex. les recharges Anthropic) sont regroupées : clique sur ▸ pour voir chaque paiement.</p><div class="actions">${btn('+ Ajouter une dépense', 'addExpense()', 'good')}</div></section>`;
 }
 function expenseRow(e, attr) {
   let quand =
@@ -1643,14 +1434,13 @@ function expenseRow(e, attr) {
       : e.date
         ? 'prochain : ' + fdate(nextDue(e))
         : '<span class="mwarn">date à préciser</span>';
-  // Doré : une facture à rattacher (absente ou trop ancienne). Vert : à jour.
   let inv = !e.invoice
-    ? '<span class="mwarn">Pas de facture</span>'
+    ? '<span class="mwarn">pas de facture</span>'
     : (invoiceUpToDate(e)
-        ? '<span class="mok">' + fdate(e.invoice.date) + '</span>'
-        : '<span class="mwarn">Datant du ' + fdate(e.invoice.date) + '</span>') +
+        ? '<span class="mok">✅ ' + fdate(e.invoice.date) + '</span>'
+        : '<span class="mwarn">⏳ ' + fdate(e.invoice.date) + '</span>') +
       (Math.round(e.invoice.amount * 100) !== Math.round(e.amount * 100)
-        ? `<br><span class="mwarn tiny">${amt(e.invoice.amount, e.cur)} sur la facture</span>`
+        ? ` <span class="mwarn tiny">⚠️ ${amt(e.invoice.amount, e.cur)} sur la facture</span>`
         : '');
   return `<tr ${attr}><td><strong>${esc(e.name)}</strong><br><span class="tiny">${esc(e.project)}</span></td><td class="r">${amt(e.amount, e.cur)}<br><span class="tiny">${e.freq === 'une fois' ? 'une fois' : 'par ' + e.freq}</span></td><td>${quand}</td><td>${inv}</td><td class="r" style="white-space:nowrap">${btn('Modifier', `editExpense('${e.id}')`)}${btn('✕', `removeExpense('${e.id}')`)}</td></tr>`;
 }
@@ -1850,8 +1640,9 @@ function saveExpense(id) {
   notify(id ? 'Dépense modifiée.' : 'Dépense ajoutée.');
 }
 function moneyPageHtml() {
-  return `<div class="strip" style="margin-bottom:24px;font-size:13px;color:var(--text-2)">Cette page couvre les ${projects.length} projets. Le sélecteur de projet n’a pas d’effet ici.</div><div class="heading"><div><h1>Argent</h1><p class="intro">Ce que coûtent les projets. Les euros et les dollars ne sont jamais additionnés.</p></div></div>${moneyTiles()}${moneyInvoices()}${moneyAI()}${moneyExpenses()}${moneyHistory()}${moneyByProject()}`;
+  return `<div class="heading"><div><div class="tiny" style="margin-bottom:8px">TOUS PROJETS</div><h1>Argent</h1><p class="intro">Ce que coûtent les projets, toutes dépenses confondues.</p></div></div>${moneyTiles()}${moneyInvoices()}${moneyAI()}${moneyExpenses()}${moneyHistory()}${moneyByProject()}`;
 }
+
 function permanentLoops(pid, pname) {
   const extra = ((projects.find((x) => x.id === pid) || {}).extraLoops || []).map((d) => ({
     id: pid + '-' + d.suffix,
@@ -1949,88 +1740,13 @@ function ideaIsRed(i) {
   if (i.errorState) return true;
   return false;
 }
-// ---------- Ce qui attend Walid (doré), ce qui dort (gris) ----------
-// Une seule source pour le menu, la barre du haut, les bandeaux et les cartes.
-function isPaused(t) {
-  return !!t.paused || t.status === 'En pause';
-}
-function isLive(t) {
-  return t.proposalStatus !== 'pending' && t.proposalStatus !== 'rejected' && !t.done && !isPaused(t);
-}
-function daysSince(iso) {
-  const ms = Date.parse(iso || '');
-  return ms ? Math.floor((Date.now() - ms) / 86400000) : null;
-}
-function agoText(iso) {
-  const ms = Date.parse(iso || '');
-  if (!ms) return '';
-  const h = Math.floor((Date.now() - ms) / 3600000);
-  if (h < 1) return 'il y a moins d’une heure';
-  if (h < 20) return `il y a ${h} h`;
-  const d = Math.max(1, Math.round(h / 24));
-  return d === 1 ? 'hier' : `il y a ${d} jours`;
-}
-function cadenceDays(t) {
-  return /jour/i.test(reviewCadenceFor(t)) ? 1 : 7;
-}
-// Un tour est en retard quand il a manqué plus d'un rendez-vous.
-function turnLate(t) {
-  if (!isLive(t)) return false;
-  const d = daysSince(t.lastAgentTurn || t.decidedAt || t.proposedAt);
-  return d !== null && d > cadenceDays(t) + 1;
-}
-function waitReasons(t) {
-  if (t.proposalStatus === 'rejected' || t.done) return [];
-  const r = [];
-  if (t.proposalStatus === 'pending') {
-    const d = daysSince(t.proposedAt);
-    r.push({ kind: 'proposition', text: 'L’agent attend ta réponse' + (d ? ` — ${d} jour${d > 1 ? 's' : ''}` : '') });
-    return r;
-  }
-  if (isStopped(t)) r.push({ kind: 'modification', text: 'Arrêtée : une modification attend ta décision' });
-  if (t.firstRunPending && !isPaused(t)) r.push({ kind: 'premier', text: 'Premier résultat à valider' });
-  if (t.status === 'En attente de validation Walid') r.push({ kind: 'validation', text: 'Attend ta validation' });
-  const ideas = (t.ideas || []).filter(ideaIsRed).length;
-  if (ideas) r.push({ kind: 'idee', text: `${ideas} idée${ideas > 1 ? 's attendent' : ' attend'} ta décision` });
-  if (stateIsAwaitingWalid(t)) r.push({ kind: 'constat', text: 'Un constat attend ta validation' });
-  if (!isPaused(t)) {
-    if (!t.objective) r.push({ kind: 'objectif', text: 'Sans objectif, rien ne peut être jugé' });
-    else if (t.objective.setBy !== 'walid') r.push({ kind: 'objectif-suggere', text: 'Objectif suggéré par l’agent, à confirmer' });
-  }
-  return r;
-}
 function taskColor(t) {
-  if (isPaused(t)) return 'gris';
-  if (waitReasons(t).length) return 'rouge';
+  if (t.status === 'En pause') return 'gris';
+  if (t.proposalStatus === 'pending') return 'rouge';
+  if (isStopped(t)) return 'rouge';
+  if ((t.ideas || []).some(ideaIsRed)) return 'rouge';
+  if (t.status === 'En attente de validation Walid') return 'rouge';
   return 'vert';
-}
-// La ligne d'état en tête de carte : { tone: wait | up | down | idle, text }.
-function stateLine(t, page = 'planification') {
-  if (t.proposalStatus === 'rejected') return { tone: 'down', text: 'Refusée par toi' };
-  if (t.done) return { tone: 'up', text: 'Terminée' + (t.doneAt ? ' le ' + shortDay(t.doneAt) : '') };
-  if (isPaused(t)) return { tone: 'idle', text: 'En pause' };
-  const w = page === 'execution' ? [] : waitReasons(t);
-  if (w.length) return { tone: 'wait', text: w[0].text + (w.length > 1 ? ` · et ${w.length - 1} autre${w.length > 2 ? 's' : ''} chose${w.length > 2 ? 's' : ''}` : '') };
-  if (!t.lastAgentTurn) return { tone: 'idle', text: 'Aucun tour enregistré' };
-  if (turnLate(t)) return { tone: 'down', text: 'Dernier tour ' + agoText(t.lastAgentTurn) };
-  if (page === 'execution') return { tone: 'up', text: 'Dernier tour ' + agoText(t.lastAgentTurn) };
-  return { tone: 'up', text: 'Tourne seule, rien à faire' };
-}
-const MOIS_FR = ['janv.', 'févr.', 'mars', 'avr.', 'mai', 'juin', 'juil.', 'août', 'sept.', 'oct.', 'nov.', 'déc.'];
-function shortDay(iso) {
-  const d = new Date(iso);
-  return isNaN(d) ? esc(iso || '') : `${d.getDate()} ${MOIS_FR[d.getMonth()]}`;
-}
-function metaLine(t) {
-  const parts = [t.type === 'Boucle' ? 'Boucle' : 'Ponctuelle'];
-  parts.push(t.origin === 'Walid' ? 'ajoutée par toi' : 'proposée par l’agent');
-  if (t.type === 'Boucle') parts.push(reviewCadenceFor(t).toLowerCase());
-  if (t.category && t.category !== 'Autre') parts.push(t.category);
-  return parts.map(esc).join(' · ');
-}
-function cardHead(t, page) {
-  const st = stateLine(t, page);
-  return `<div class="ahead"><span class="astate c-${st.tone}">${esc(st.text)}</span><span class="note">${metaLine(t)}</span></div>`;
 }
 function projectColor(d) {
   let ts = d.tasks || [];
@@ -2039,10 +1755,8 @@ function projectColor(d) {
   return 'vert';
 }
 function colorDot(c) {
-  // Doré : ça t'attend · gris : en pause · rien à faire : pas de pastille (on ne cherche que le doré).
-  if (c === 'vert') return '';
-  let m = { rouge: 'var(--wait)', gris: 'var(--idle)' };
-  return `<span class="cdot" style="background:${m[c]}" title="${c === 'rouge' ? 'Quelque chose t’attend' : 'En pause'}"></span>`;
+  let m = { rouge: '#e06c6c', vert: '#5fbf7d', gris: '#8a8a8a' };
+  return `<span class="cdot" style="background:${m[c]}" title="${c === 'rouge' ? 'Quelque chose t’attend' : c === 'gris' ? 'En pause' : 'Rien à faire'}"></span>`;
 }
 function projectColorFor(id) {
   try {
@@ -2084,7 +1798,7 @@ function autonomyBadge(t) {
 }
 function stopBanner(t) {
   if (!isStopped(t)) return '';
-  return `<section class="strip red"><strong>Action arrêtée — en attente de ta décision</strong><p>${esc(t.stopReason || 'Une modification a été proposée : l’action ne reprend qu’après ta validation.')}</p><div class="actions">${btn('Valider la modification', `approveChange('${t.id}')`, 'good')}${btn('Refuser et reprendre l’ancienne version', `rejectChange('${t.id}')`, 'danger')}</div></section>`;
+  return `<section class="strip red"><strong>Action arrêtée — en attente de ta décision</strong><p>${esc(t.stopReason || 'Une modification a été proposée : l’action ne reprend qu’après ta validation.')}</p><div class="actions">${btn('✅ Valider la modification', `approveChange('${t.id}')`, 'good')}${btn('❌ Refuser et reprendre l’ancienne version', `rejectChange('${t.id}')`, 'danger')}</div></section>`;
 }
 function approveChange(id) {
   let t = task(id);
@@ -2136,15 +1850,17 @@ function revokeAutonomy(id) {
 // proposition façon bras droit
 function proposalCard(t) {
   if (t.proposalStatus !== 'pending')
-    return '';
+    return t.proposalStatus === 'approved'
+      ? `<p class="note green">Action validée par Walid · elle tourne seule désormais.</p>`
+      : '';
   let p = t.brief || {};
-  return `<section class="strip wait"><strong>Ce que l’agent propose</strong>
+  return `<section class="strip red"><strong>Proposition de l’agent</strong>
  <div class="brief"><div><span>Ce que j’ai observé</span>${esc(p.observed || t.proposalReason || 'Observation non précisée.')}</div>
  <div><span>Ce que j’en déduis <em>(hypothèse)</em></span>${esc(p.hypothesis || 'À confirmer sur un volume plus large.')}</div>
  <div><span>Ce que je propose</span>${esc(p.proposal || t.goal)}</div>
  <div><span>Ce que ça change</span>${esc(p.effect || 'Effet attendu à mesurer au prochain tour.')}</div>
  <div><span>Si on ne fait rien</span>${esc(p.ifNothing || 'La situation reste en l’état.')}</div></div>
- <div class="actions">${btn('Valider l’action', `setTaskProposal('${t.id}',true)`, 'good')}${btn('Refuser', `setTaskProposal('${t.id}',false)`, 'danger')}</div></section>`;
+ <div class="actions">${btn('✅ Valider l’action', `setTaskProposal('${t.id}',true)`, 'good')}${btn('❌ Refuser', `setTaskProposal('${t.id}',false)`, 'danger')}</div></section>`;
 }
 // leçons : statut
 const LESSON_STATES = ['à tester', 'confirmée', 'invalidée'];
@@ -2162,57 +1878,30 @@ function setLessonState(taskId, idx, st) {
   }
 }
 
-// Ce qui attend Walid dans le projet actif (doré). Sert à la barre du haut et aux pastilles du menu.
-function waitingCounts(d = data) {
-  let tasks = (d.tasks || []).filter((t) => t.proposalStatus !== 'rejected' && !t.done);
-  return {
-    planification: tasks.filter((t) => taskColor(t) === 'rouge').length,
-    revision: tasks.filter((t) => stateIsAwaitingWalid(t)).length,
-    resultats: (d.kpis || []).filter((k) => k.status === 'propose').length,
-  };
-}
-function waitingSentence(n) {
-  if (!n) return 'Rien ne t’attend dans ce projet';
-  const mots = ['', 'Une chose', 'Deux choses', 'Trois choses', 'Quatre choses', 'Cinq choses'];
-  return (mots[n] || n + ' choses') + (n > 1 ? ' t’attendent' : ' t’attend') + ' dans ce projet';
-}
-function navLink(slug, label, active, waits) {
-  return `<a href="#${slug}" class="${active ? 'active' : ''}"${active ? ' aria-current="page"' : ''}>${label}${
-    waits ? '<span class="wait-dot" title="Quelque chose t’attend ici" aria-label="(quelque chose t’attend)"></span>' : ''
-  }</a>`;
-}
 function render() {
   if (!moneyData) moneyData = loadMoney();
   let hash = location.hash.slice(1);
   let isMoney = hash === moneyPage.slug;
   let idx = slugs.indexOf(hash);
   page = idx < 0 ? 0 : idx;
-  let w = waitingCounts();
-  let stepOn = (i) => !isMoney && slugs.includes(hash || 'planification') && i === page;
   document.getElementById('nav').innerHTML =
-    `<div class="nav-group"><div class="nav-title">Cycle de travail</div>${pages
-      .map((p, i) => navLink(slugs[i], p, stepOn(i), w[slugs[i]] > 0))
-      .join('')}</div>` +
-    `<div class="nav-group">${navLink('resultats', 'Résultats', hash === 'resultats', w.resultats > 0)}${navLink(
-      'historique',
-      'Historique',
-      hash === 'historique',
-      false,
-    )}</div>` +
-    `<div class="nav-group"><div class="nav-title">Hors projet</div>${navLink(moneyPage.slug, 'Argent — tous projets', isMoney, false)}</div>`;
+    pages
+      .map(
+        (p, i) =>
+          `<a href="#${slugs[i]}" class="${!isMoney && i === page ? 'active' : ''}"><span class="num">0${i + 1}</span>${p}</a>`,
+      )
+      .join('') +
+    `<a href="#${moneyPage.slug}" class="${isMoney ? 'active' : ''}" style="margin-top:14px;border-top:1px solid var(--line);padding-top:14px"><span class="num">€</span>${moneyPage.name}</a>`;
   document.getElementById('breadcrumb').textContent = isMoney ? moneyPage.name : pages[page];
-  document.getElementById('activeProject').textContent = projectDef.name;
-  let total = w.planification + w.resultats;
-  document.getElementById('activeDot').innerHTML = colorDot(total ? 'rouge' : projectColor(data));
-  document.querySelector('.projectSelectWrap').hidden = isMoney;
-  document.getElementById('waitSummary').textContent = waitingSentence(total);
   if (isMoney) {
+    document.getElementById('activeProject').textContent = projectDef.name;
     main.innerHTML = moneyPageHtml();
     return;
   }
+  document.getElementById('activeProject').textContent = projectDef.name;
   main.innerHTML =
     [planning, execution, verification, memory, priorities, revision][page]() +
-    `<details style="margin-top:32px;border-top:1px solid var(--line);padding-top:18px"><summary style="cursor:pointer;color:var(--text-3)">Une remarque sur cette page ?</summary><p class="note">Tes remarques restent liées à cette étape.</p><textarea placeholder="Il manque… / Je voudrais voir…" oninput="note(this.value)">${esc(data.notes[page] || '')}</textarea><div class="actions">${btn('Télécharger mes remarques', 'downloadNotes()')}</div></details><div class="page-bottom">${page ? btn('← ' + pages[page - 1], `go(${page - 1})`) : '<span></span>'}${page < 5 ? btn(pages[page + 1] + ' →', `go(${page + 1})`) : btn('Retour à la planification ↻', 'go(0)')}</div>`;
+    `<details style="margin-top:32px;border-top:1px solid var(--line);padding-top:18px"><summary style="cursor:pointer;color:var(--gold)">Une remarque sur cette page ?</summary><p class="note">Tes remarques restent liées à cette étape.</p><textarea placeholder="Il manque… / Je voudrais voir…" oninput="note(this.value)">${esc(data.notes[page] || '')}</textarea><div class="actions">${btn('Télécharger mes remarques', 'downloadNotes()')}</div></details><div class="page-bottom">${page ? btn('← ' + pages[page - 1], `go(${page - 1})`) : '<span></span>'}${page < 5 ? btn(pages[page + 1] + ' →', `go(${page + 1})`) : btn('Retour à la planification ↻', 'go(0)')}</div>`;
 }
 function setCategory(f) {
   categoryFilter = f;

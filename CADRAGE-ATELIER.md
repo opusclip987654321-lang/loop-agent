@@ -60,8 +60,6 @@ Le type est visible sur la carte de l'action. **[Décidé]**
 
 C'est la règle qui évite que la liste gonfle : seules les ponctuelles s'accumulent, et seules elles sortent. **[Décidé]**
 
-Précision (refonte du 07/11/2026) : en Exécution, une ponctuelle terminée et une action en pause passent dans un bloc séparé « Ce qui ne tourne plus », lisible mais hors de « Ce qui tourne », avec un lien vers ce qu'elle a appris. **[Décidé]**
-
 ### Cas de Petites Histoires Vraies
 - Une **vidéo longue** = une action ponctuelle, avec ses étapes (texte, dessins, montage, date de diffusion). **[Décidé]**
 - Un **Short** = une idée à l'intérieur de l'action de la vidéo dont il découle. **[Décidé]**
@@ -95,22 +93,17 @@ L'action arrêtée reste visible, avec un bandeau expliquant pourquoi et deux bo
 
 ## 6. Les couleurs
 
-*Règle remplacée le 07/11/2026 par celle des maquettes de novembre (`maquettes/Logique.html`). L'ancienne règle (vert = ça tourne, rouge = ça attend, gris = pause ; pas d'orange) mélangeait l'état d'une action et le sens des chiffres.* **[Décidé]**
+Trois couleurs, pas quatre. Pas d'orange. **[Décidé]**
 
-Une couleur, un sens :
+| Couleur | Sens |
+|---|---|
+| **Vert** | Rien à faire, ça tourne |
+| **Rouge** | Quelque chose attend Walid : il faut cliquer dedans |
+| **Gris** | En pause (une pause n'est pas une panne) |
 
-| Couleur | Sens | Où |
-|---|---|---|
-| **Doré** `#e3b778` | Ça t'attend | Objectif à fixer, bilan à écrire, proposition à trancher, chiffre non relevé. Rien d'autre : ni les titres, ni les onglets, ni les données. |
-| **Vert** `#8fc49c` | Ça va dans le bon sens | Tendances qui progressent, leçons confirmées, ce qui tourne sans rien demander. Avec une flèche quand c'est un chiffre. |
-| **Terre cuite** `#d9846a` | Ça recule | Baisses, périodes perdues, leçons invalidées, tour en retard. Avec une flèche quand c'est un chiffre. |
-| **Gris** `#8a8d92` | Ça dort ou ça manque | Pauses ; donnée jamais relevée, en italique pour qu'un trou ne ressemble jamais à un zéro. |
+**La couleur remonte** : idée rouge → action rouge → projet rouge dans le sélecteur. **[Décidé]**
 
-La flèche dit le sens du chiffre (▲ monte, ▼ baisse) ; la couleur dit si c'est bon. Une dépense qui baisse est donc ▼ en vert. **[Décidé]**
-
-**Le doré remonte** : idée qui attend → action dorée → pastille dorée sur l'étape du menu et sur le projet dans le sélecteur, avec la phrase « N choses t'attendent dans ce projet ». **[Décidé]**
-
-Quand on ouvre une action dorée, un bandeau en haut nomme les idées qui attendent, et **ces idées sont placées en premier** dans la liste. Sans cela, on tombe sur une idée verte et il faut chercher. **[Décidé — correction d'un défaut constaté]**
+Quand on ouvre une action rouge, un bandeau en haut nomme les idées qui attendent, et **ces idées sont placées en premier** dans la liste. Sans cela, on tombe sur une idée verte et il faut chercher. **[Décidé — correction d'un défaut constaté]**
 
 Ce mécanisme remplace toute page d'erreurs séparée : une erreur est un **état de l'idée concernée**, pas une page à part. **[Décidé]**
 

@@ -59,7 +59,7 @@ setTaskProposal = function (id, approved) {
   if (!approved) {
     modal(
       'Refuser cette action',
-      `<p><strong>${esc(t.title)}</strong></p><label for="rejectReason">Pourquoi ? <span class="note">(facultatif — l’agent le lira et pourra proposer une version corrigée)</span></label><textarea id="rejectReason" placeholder="Ex. : trop risqué pour le compte, pas prioritaire ce mois-ci, plutôt faire…"></textarea><p class="note">Sans raison ni commentaire, l’action quittera le tableau dans 2 jours. Avec une raison, elle reste jusqu’à la réponse de l’agent (7 jours au plus). Elle reste visible dans l’Historique.</p><div class="actions">${btn('Refuser', `confirmReject('${t.id}')`, 'danger')}${btn('Annuler', 'closeDialog()')}</div>`,
+      `<p><strong>${esc(t.title)}</strong></p><label for="rejectReason">Pourquoi ? <span class="note">(facultatif — l’agent le lira et pourra proposer une version corrigée)</span></label><textarea id="rejectReason" placeholder="Ex. : trop risqué pour le compte, pas prioritaire ce mois-ci, plutôt faire…"></textarea><p class="note">Sans raison ni commentaire, l’action quittera le tableau dans 2 jours. Avec une raison, elle reste jusqu’à la réponse de l’agent (7 jours au plus). Elle reste visible dans l’Historique.</p><div class="actions">${btn('❌ Refuser', `confirmReject('${t.id}')`, 'danger')}${btn('Annuler', 'closeDialog()')}</div>`,
     );
     setTimeout(() => document.getElementById('rejectReason')?.focus(), 50);
     return;
@@ -93,7 +93,7 @@ proposalCard = function (t) {
   if (t.proposalStatus !== 'rejected') return baseProposalCard(t);
   const d = boardDeadline(t);
   const words = hasWalidWords(t);
-  return `<section class="strip"><strong>Refusée par Walid</strong> <span class="note">le ${esc(frDate(t.rejectedAt || t.decidedAt))}</span>${
+  return `<section class="strip"><strong>❌ Refusée par Walid</strong> <span class="note">le ${esc(frDate(t.rejectedAt || t.decidedAt))}</span>${
     t.rejectReason ? `<p>Raison : ${esc(t.rejectReason)}</p>` : ''
   }<p class="note">${
     t.supersededBy
@@ -121,47 +121,35 @@ function historyItems() {
     .sort((a, b) => String(endDate(b) || '').localeCompare(String(endDate(a) || '')));
 }
 function endDate(t) {
-  return t.proposalStatus === 'rejected'
-    ? t.rejectedAt || t.decidedAt || t.proposedAt
-    : t.doneAt || t.lastAgentTurn || t.decidedAt || t.proposedAt;
+  return t.proposalStatus === 'rejected' ? t.rejectedAt || t.decidedAt : t.doneAt || t.lastAgentTurn || t.decidedAt || t.proposedAt;
 }
-function historyRow(t) {
+function historyCard(t) {
   const ok = t.proposalStatus !== 'rejected';
-  const lessons = (data.memories || []).filter((m) => m.taskId === t.id).length;
-  const issue = ok
-    ? `<span class="c-up">Terminée${lessons ? ` · ${lessons} leçon${lessons > 1 ? 's' : ''}` : ''}</span>`
-    : `<span class="c-down">Refusée par toi</span>${
-        leftBoard(t) ? '' : '<br><span class="note">encore visible en Planification</span>'
-      }`;
-  return `<tr><td class="hd">${shortDay(endDate(t))}</td><td><div class="ht">${esc(t.title)}${
-    t.historyKept ? ' <span class="note">· gardée</span>' : ''
-  }</div><div class="note">${t.type === 'Boucle' ? 'Boucle' : 'Ponctuelle'} · ${
-    ok ? (t.objective && /objectif atteint|Fait ✓/.test(objectiveProgress(t)) ? 'objectif atteint' : t.origin === 'Walid' ? 'demandée par toi' : 'proposée par l’agent') : t.origin === 'Walid' ? 'ajoutée par toi' : 'proposée par l’agent'
-  }</div>${t.rejectReason ? `<div class="note" style="margin-top:4px">Raison : ${esc(t.rejectReason)}</div>` : ''}</td><td>${issue}</td><td class="hl">${
-    ok && lessons ? `<a href="#memoire">Voir la leçon</a>` : `<a href="javascript:void 0" onclick="detail('${t.id}')">${ok ? 'Ouvrir' : 'Relire la proposition'}</a>`
-  }<span class="hb">${
-    t.historyKept ? btn('Ne plus garder', `setHistoryKept('${t.id}',false)`, 'small') : btn('Garder', `setHistoryKept('${t.id}',true)`, 'small')
-  }${btn('Lu, retirer', `removeFromHistory('${t.id}')`, 'small')}</span></td></tr>`;
+  const where = ok ? 'Terminée' : leftBoard(t) ? 'Retirée du tableau' : 'Encore au tableau';
+  return `<article class="card ${ok ? 'cgreen' : 'cred'}"><div class="toolbar" style="margin:0 0 8px">${pill(
+    ok ? 'Terminée' : 'Refusée',
+  )}<span class="badge">${t.type === 'Boucle' ? '🔁 Boucle' : '● Ponctuelle'}</span><span class="badge gold">${esc(where)}</span>${
+    t.historyKept ? '<span class="badge gold">📌 Gardée</span>' : ''
+  }</div><h3>${esc(t.title)}</h3><p class="muted">${esc(t.goal || '')}</p><p class="note">${t.proposedAt ? `Proposée le ${esc(frDate(t.proposedAt))} · ` : ''}${ok ? 'terminée' : 'refusée'} le ${esc(frDate(endDate(t)))}</p>${
+    t.rejectReason ? `<p>Raison du refus : ${esc(t.rejectReason)}</p>` : ''
+  }<div class="actions">${
+    t.historyKept
+      ? btn('Ne plus garder', `setHistoryKept('${t.id}',false)`)
+      : btn('📌 Garder dans l’historique', `setHistoryKept('${t.id}',true)`, 'good')
+  }${btn('✓ Lu, retirer', `removeFromHistory('${t.id}')`)}${btn('Ouvrir l’action ↗', `detail('${t.id}')`)}</div></article>`;
 }
 function historyPage() {
   const items = historyItems();
-  const all = (data.tasks || []).filter((t) => (t.proposalStatus === 'rejected' || t.done) && !t.historyHidden);
-  const nDone = all.filter((t) => t.done && t.proposalStatus !== 'rejected').length;
-  const nRej = all.filter((t) => t.proposalStatus === 'rejected').length;
-  const nKept = all.filter((t) => t.historyKept).length;
-  const filters = [
-    ['Toutes', 'Tout', ''],
-    ['Terminées', `Terminées · ${nDone}`, 'c-up'],
-    ['Refusées', `Refusées · ${nRej}`, 'c-down'],
-    ['Gardées', `Gardées · ${nKept}`, ''],
-  ];
-  return `<div class="heading"><div><h1>Historique</h1><p class="intro">Ce qui est fini : les actions terminées et celles que tu as refusées. Les boucles et les actions en cours restent dans le cycle.</p></div></div><div class="toolbar" style="margin:0 0 22px">${filters
-    .map(([k, label, c]) => btn(label, `setHistoryFilter('${k}')`, (historyFilter === k ? 'active ' : '') + c))
+  const filters = ['Toutes', 'Terminées', 'Refusées', 'Gardées'];
+  return `<div class="heading"><div><div class="tiny" style="margin-bottom:8px">${esc(
+    projectDef.name.toUpperCase(),
+  )} / HISTORIQUE</div><h1>Historique</h1><p class="intro">Ce qui est fini : les actions ponctuelles terminées et les actions refusées. Les boucles et les actions en cours restent sur le tableau. « Garder » la conserve ici ; « Lu, retirer » l’enlève de cette liste (une action refusée est alors supprimée).</p></div></div><div class="toolbar">${filters
+    .map((f) => btn(f, `setHistoryFilter('${f}')`, historyFilter === f ? 'active' : ''))
     .join('')}</div>${
     items.length
-      ? `<div class="tablewrap htable"><table><thead><tr><th>Date</th><th>Action</th><th>Issue</th><th></th></tr></thead><tbody>${items.map(historyRow).join('')}</tbody></table></div>`
-      : '<div class="empty">Rien de fini pour l’instant.</div>'
-  }<p class="note" style="margin-top:16px;max-width:70ch">Une action refusée garde sa proposition, une action terminée garde ses chiffres et sa leçon — c’est ce qui permet à l’agent de ne pas reproposer la même chose dans trois mois. « Lu, retirer » enlève la ligne d’ici (une action refusée est alors supprimée).</p>`;
+      ? `<div class="grid">${items.map(historyCard).join('')}</div>`
+      : '<div class="empty">Aucune décision à afficher.</div>'
+  }`;
 }
 function setHistoryFilter(f) {
   historyFilter = f;
@@ -182,7 +170,7 @@ function removeFromHistory(id) {
     modal(
       'Retirer cette action refusée',
       `<p><strong>${esc(t.title)}</strong></p><p>Elle sera supprimée du tableau et de l’historique. L’agent ne la verra plus.</p><div class="actions">${btn(
-        'Lu, supprimer',
+        '✓ Lu, supprimer',
         `confirmRemoveRejected('${t.id}')`,
         'danger',
       )}${btn('Annuler', 'closeDialog()')}</div>`,
@@ -208,18 +196,12 @@ const baseRender = render;
 render = function () {
   const isHistory = location.hash.slice(1) === HISTORY_SLUG;
   baseRender();
-  if (isHistory) {
-    const nav = document.getElementById('nav');
-    nav.querySelectorAll('a.active').forEach((a) => {
-      a.classList.remove('active');
-      a.removeAttribute('aria-current');
-    });
-    const me = nav.querySelector(`a[href="#${HISTORY_SLUG}"]`);
-    if (me) {
-      me.classList.add('active');
-      me.setAttribute('aria-current', 'page');
-    }
-  }
+  const nav = document.getElementById('nav');
+  if (isHistory) nav.querySelectorAll('a.active').forEach((a) => a.classList.remove('active'));
+  nav.insertAdjacentHTML(
+    'beforeend',
+    `<a href="#${HISTORY_SLUG}" class="${isHistory ? 'active' : ''}"><span class="num">⏱</span>Historique</a>`,
+  );
   if (isHistory) {
     document.getElementById('breadcrumb').textContent = 'Historique';
     main.innerHTML = historyPage();

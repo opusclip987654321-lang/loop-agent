@@ -48,25 +48,21 @@ function objectiveProgress(t) {
     : `${fmtN(total)} / ${fmtN(th.value)} ${esc(th.unit || '')}`;
 }
 
-// Sur la carte : une ligne d'objectif (et une barre quand il est chiffré). L'objectif à fixer
-// ou à confirmer se signale dans la ligne d'état de la carte, en doré.
 function objectiveStrip(t) {
   const o = t.objective;
-  if (!o || t.proposalStatus === 'rejected' || t.done) return '';
-  const prog = objectiveProgress(t);
-  const reached = /objectif atteint|Fait ✓/.test(prog);
-  let bar = '';
-  if (o.kind === 'chiffre' && o.direction !== 'reduire' && o.target > 0) {
-    const last = (t.results || []).find((r) => !r.unavailable && typeof r.value === 'number');
-    if (last) {
-      const pct = Math.max(0, Math.min(100, (last.value / o.target) * 100));
-      bar = `<div class="objbar"><div class="progress"><i style="width:${pct.toFixed(1)}%"></i></div><span class="c-up num">${fmtN(last.value)} / ${fmtN(o.target)}</span></div>`;
-    }
-  }
-  return `<div class="objline"><span class="note">Objectif ${o.setBy !== 'walid' ? 'suggéré' : ''} :</span> ${objectiveText(o)}${
-    !bar && prog ? ` <span class="${reached ? 'c-up' : 'note'}">· ${prog}</span>` : ''
-  }</div>${bar}`;
+  if (t.proposalStatus === 'rejected' || t.done) return '';
+  if (!o)
+    return t.proposalStatus === 'pending'
+      ? ''
+      : `<div class="strip"><strong>🎯 Objectif à fixer</strong><p class="note">Sans objectif, l’agent ne peut pas juger cette action.</p><div class="actions">${btn('Fixer l’objectif', `editObjective('${t.id}')`)}</div></div>`;
+  const pending = o.setBy !== 'walid';
+  return `<div class="strip${pending ? ' red' : ''}"><strong>🎯 ${esc(OBJ_LABELS[o.kind] || '')}</strong> · ${objectiveText(o)}${
+    pending ? ' <span class="note">(suggéré par l’agent)</span>' : ''
+  }<p class="note">${objectiveProgress(t)}</p>${
+    t.proposalStatus === 'pending' ? '' : `<div class="actions">${btn('Modifier l’objectif', `editObjective('${t.id}')`)}</div>`
+  }</div>`;
 }
+
 // Carte d'action : l'objectif s'ajoute sous la proposition.
 const baseProposalCardObj = proposalCard;
 proposalCard = function (t) {
@@ -96,7 +92,7 @@ function editObjective(id, approving = false) {
 <option value="a_observer" ${sel(o.kind, 'a_observer')}>À observer — pas encore de cible, mais un seuil pour juger</option></select>
 <div id="obj-chiffre" class="grid"><div><label>Cible</label><input id="objtarget" type="number" step="any" value="${esc(o.target ?? '')}"></div><div><label>Unité</label><input id="objunit" value="${esc(o.unit || '')}" placeholder="Ex. rendez-vous / semaine"></div><div><label>Sens</label><select id="objdir"><option value="augmenter" ${sel(o.direction, 'augmenter')}>Augmenter</option><option value="reduire" ${sel(o.direction, 'reduire')}>Réduire</option></select></div></div>
 <div id="obj-observer"><div class="grid"><div><label>Juger après</label><input id="objthval" type="number" min="1" value="${esc(th.value ?? '')}"></div><div><label>Seuil en</label><select id="objthtype" onchange="objKindChanged()"><option value="volume" ${sel(th.type, 'volume')}>Volume</option><option value="duree" ${sel(th.type, 'duree')}>Jours</option></select></div><div id="obj-thunit"><label>De quoi ?</label><input id="objthunit" value="${esc(th.unit || '')}" placeholder="Ex. mails envoyés dans le secteur"></div></div><p class="note">Exemple : 200 mails envoyés dans un même secteur avant de juger.</p></div>
-<div class="actions"><button class="primary">${approving ? 'Valider l’action' : 'Enregistrer'}</button>${btn('Annuler', 'closeDialog()')}</div></form>`,
+<div class="actions"><button class="primary">${approving ? '✅ Valider l’action' : 'Enregistrer'}</button>${btn('Annuler', 'closeDialog()')}</div></form>`,
   );
   objKindChanged();
   document.getElementById('objform').onsubmit = (e) => {
@@ -163,7 +159,7 @@ function resultsPanel(t) {
         }</td><td>${r.source === 'walid' ? 'Saisi par Walid' : 'Relevé par l’agent'}${r.origin ? `<br><span class="note">${esc(r.origin)}</span>` : ''}</td><td>${esc(r.note || '')}</td></tr>`,
     )
     .join('');
-  return `<section class="card space"><div class="heading" style="margin:0 0 8px"><h3>Objectif et résultats</h3><div class="actions" style="margin:0">${btn(
+  return `<section class="card space"><div class="heading" style="margin:0 0 8px"><h3>🎯 Objectif et résultats</h3><div class="actions" style="margin:0">${btn(
     t.objective ? 'Modifier l’objectif' : 'Fixer l’objectif',
     `editObjective('${t.id}')`,
   )}</div></div>${
@@ -289,15 +285,15 @@ detail = function (id, showTools = false) {
 function firstRunStrip(t) {
   if (!t.firstRunPending) return '';
   const last = (t.reviewHistory || []).find((h) => h.by === 'agent') || {};
-  return `<section class="strip red"><strong>Premier résultat à valider</strong>${
+  return `<section class="strip red"><strong>🔎 Premier résultat à valider</strong>${
     last.aiObservation ? `<p><span class="note">Ce que l’agent a fait :</span> ${esc(last.aiObservation)}</p>` : ''
   }${last.aiDecision ? `<p><span class="note">Ce qu’il en conclut :</span> ${esc(last.aiDecision)}</p>` : ''}${
     last.plan ? `<p><span class="note">La suite qu’il propose :</span> ${esc(last.plan)}</p>` : ''
   }<p class="note">L’action attend ta réponse avant de continuer.</p><div class="actions">${btn(
-    'Valider : elle tourne seule',
+    '✅ Valider : elle tourne seule',
     `validateFirstRun('${t.id}')`,
     'good',
-  )}${btn('Refaire avec mes remarques', `redoFirstRun('${t.id}')`)}</div></section>`;
+  )}${btn('✏️ Refaire avec mes remarques', `redoFirstRun('${t.id}')`)}</div></section>`;
 }
 function validateFirstRun(id) {
   const t = task(id);
@@ -336,7 +332,11 @@ const baseProposalCardFirst = proposalCard;
 proposalCard = function (t) {
   return firstRunStrip(t) + baseProposalCardFirst(t);
 };
-// La couleur d'une action « premier résultat à valider » vient de waitReasons (app.js).
+const baseTaskColorFirst = taskColor;
+taskColor = function (t) {
+  if (t.firstRunPending && t.status !== 'En pause') return 'rouge';
+  return baseTaskColorFirst(t);
+};
 
 // Premier affichage avec les objectifs.
 render();
