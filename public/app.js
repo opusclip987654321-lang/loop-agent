@@ -1293,6 +1293,25 @@ function allMonths() {
   }
   return out.reverse();
 }
+// Prochaine échéance d'un abonnement : la date de paiement avancée de mois en mois
+// (ou d'année en année) jusqu'à aujourd'hui ou après.
+function nextDue(e) {
+  let [y, m, d] = String(e.date).split('-').map(Number);
+  if (!y || !m || !d) return e.date;
+  const today = new Date().toISOString().slice(0, 10);
+  const iso = () => {
+    const last = new Date(Date.UTC(y, m, 0)).getUTCDate();
+    return y + '-' + String(m).padStart(2, '0') + '-' + String(Math.min(d, last)).padStart(2, '0');
+  };
+  for (let i = 0; i < 600 && iso() < today; i++) {
+    if (e.freq === 'an') y++;
+    else if (++m > 12) {
+      m = 1;
+      y++;
+    }
+  }
+  return iso();
+}
 function invoiceUpToDate(e) {
   if (!e.invoice) return false;
   let d = (new Date() - new Date(e.invoice.date)) / 86400000;
@@ -1413,7 +1432,7 @@ function expenseRow(e, attr) {
     e.freq === 'une fois'
       ? fdate(e.date)
       : e.date
-        ? 'prochain : ' + fdate(e.date)
+        ? 'prochain : ' + fdate(nextDue(e))
         : '<span class="mwarn">date à préciser</span>';
   let inv = !e.invoice
     ? '<span class="mwarn">pas de facture</span>'
