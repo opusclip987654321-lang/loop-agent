@@ -80,7 +80,7 @@ test('connexion, état, écriture versionnée et conflit', async () => {
   assert.match(r.headers.get('set-cookie'), /SameSite=Strict/);
 
   const st = await (await fetch(base + '/api/state', { headers: { Cookie: cookie } })).json();
-  assert.equal(st.projects.length, 9);
+  assert.equal(st.projects.length, 11);
   assert.ok(st.projects.some((p) => p.id === 'impacteur-communaute'));
   assert.deepEqual(st.docs, {});
 
@@ -289,6 +289,13 @@ test('connecteur : un tour complet sur un projet jamais ouvert', async () => {
   const list = (await call('lister_projets', {})).out;
   assert.equal(list.find((p) => p.projet === 'impacteur-mail').couleur, 'rouge');
   assert.equal(list.find((p) => p.projet === 'extrait-politique').couleur, 'gris');
+});
+
+test('projet Gestion de Loop Agent : sa boucle propre en plus des 3 permanentes', async () => {
+  const r = await call('lire_projet', { projet: 'gestion-loop-agent' });
+  const ids = r.out.actions.map((a) => a.id);
+  assert.ok(ids.includes('gestion-loop-agent-organisation'));
+  assert.equal(ids.length, 4);
 });
 
 test('connecteur : objectif et résultats mesurés', async () => {

@@ -211,5 +211,73 @@ detail = function (id, showTools = false) {
     layout.insertAdjacentHTML('afterend', resultsPanel(t));
 };
 
+
+// ---------- Copier une action dans d'autres projets (§6, décidé le 07/11/2026) ----------
+// Copies indépendantes : chaque projet a la sienne et elles évoluent séparément.
+function copyActionDialog(id) {
+  const t = task(id);
+  if (!t) return;
+  const others = projects.filter((p) => p.id !== projectId);
+  modal(
+    'Copier l’action dans d’autres projets',
+    `<p><strong>${esc(t.title)}</strong></p><p class="note">Chaque projet reçoit sa propre copie, validée, avec le même objectif. Elles évoluent ensuite séparément ; les résultats et l’historique ne sont pas copiés.</p><div style="display:grid;gap:6px;margin:12px 0">${others
+      .map(
+        (p) =>
+          `<label style="display:flex;gap:8px;align-items:center;margin:0"><input type="checkbox" name="copyto" value="${esc(p.id)}"> ${esc(p.name)}${p.paused ? ' <span class="note">(en pause)</span>' : ''}</label>`,
+      )
+      .join('')}</div><div class="actions">${btn('Copier', `confirmCopyAction('${t.id}')`, 'primary')}${btn('Annuler', 'closeDialog()')}</div>`,
+  );
+}
+function confirmCopyAction(id) {
+  const t = task(id);
+  if (!t) return;
+  const targets = [...document.querySelectorAll('input[name=copyto]:checked')].map((x) => x.value);
+  if (!targets.length) return notify('Coche au moins un projet.');
+  const now = new Date().toISOString();
+  for (const pid of targets) {
+    const doc = loadProject(pid);
+    const nid = 'copie-' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+    const c = JSON.parse(JSON.stringify(t));
+    Object.assign(c, {
+      id: nid,
+      origin: 'Walid',
+      permanent: false,
+      proposalStatus: 'approved',
+      decidedAt: now,
+      status: 'À planifier',
+      stopped: false,
+      stopReason: '',
+      done: false,
+      doneAt: undefined,
+      results: [],
+      reviewHistory: [],
+      reviewConversation: [],
+      lastAgentTurn: undefined,
+      copiedFrom: { project: projectId, action: t.id, at: now },
+    });
+    if (c.objective) c.objective = { ...c.objective, setBy: 'walid', setAt: now };
+    c.ideas = (c.ideas || []).map((i, n) =>
+      typeof i === 'string'
+        ? i
+        : { ...i, id: nid + '-idea-' + n, latestStage: 'Planification', stageHistory: [], agentComment: '', errorState: undefined },
+    );
+    doc.tasks.push(c);
+    doc.priorities = doc.priorities || [];
+    doc.priorities.push(nid);
+    LA.set(projectKey(pid), JSON.stringify(doc));
+  }
+  closeDialog();
+  render();
+  notify('Action copiée dans ' + targets.length + ' projet(s).');
+}
+const baseDetailCopy = detail;
+detail = function (id, showTools = false) {
+  baseDetailCopy(id, showTools);
+  const t = task(id);
+  if (!t || t.proposalStatus === 'pending' || t.proposalStatus === 'rejected') return;
+  const box = document.querySelector('#dialogbody .toolbar');
+  if (box) box.insertAdjacentHTML('beforeend', btn('⧉ Copier dans d’autres projets', `copyActionDialog('${t.id}')`));
+};
+
 // Premier affichage avec les objectifs.
 render();

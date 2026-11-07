@@ -57,7 +57,7 @@ export function newIdea(taskId, index, text, extra = {}) {
 }
 
 export function permanentLoops(project) {
-  return LOOP_DEFS.map((d) => {
+  return [...LOOP_DEFS, ...(project.extraLoops || [])].map((d) => {
     const id = `${project.id}-${d.suffix}`;
     return {
       id,

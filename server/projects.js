@@ -68,6 +68,35 @@ export const PROJECTS = [
     kind: 'webapp',
     description: 'Aide les personnes à se rencontrer autour d’activités et de sorties.',
   },
+  {
+    id: 'ebook',
+    name: 'Ebook',
+    type: 'Création et vente d’ebooks',
+    kind: 'ebook',
+    description: 'Toute la chaîne d’un ebook : sujet, écriture, couverture, mise en page, page de vente, mise en vente et promotion.',
+  },
+  {
+    id: 'gestion-loop-agent',
+    name: 'Gestion de Loop Agent',
+    type: 'Amélioration de Loop Agent lui-même',
+    kind: 'meta',
+    description: 'Remet en question l’organisation de Loop Agent : ce que Walid répète, ce qui n’a pas de place, les onglets qui manquent.',
+    extraLoops: [
+      {
+        suffix: 'organisation',
+        title: 'Remettre en question l’organisation de Loop Agent',
+        goal: 'Repérer ce qui manque ou se répète dans Loop Agent, et proposer de l’améliorer.',
+        metric: 'Améliorations proposées puis adoptées par Walid',
+        freq: 'Chaque semaine',
+        ideas: [
+          'Relever les commentaires que Walid fait trop souvent sur ses projets et qu’on peut automatiser',
+          'Repérer les informations importantes pour lesquelles aucune place n’est prévue dans le site',
+          'Repérer les sujets non traités qui mériteraient un onglet',
+          'Proposer chaque amélioration avec les 5 points',
+        ],
+      },
+    ],
+  },
 ];
 
 const IDS = new Set(PROJECTS.map((p) => p.id));

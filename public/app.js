@@ -1625,6 +1625,24 @@ function moneyPageHtml() {
 }
 
 function permanentLoops(pid, pname) {
+  const extra = ((projects.find((x) => x.id === pid) || {}).extraLoops || []).map((d) => ({
+    id: pid + '-' + d.suffix,
+    title: d.title,
+    origin: 'Agent',
+    owner: 'Agent',
+    goal: d.goal,
+    metric: d.metric,
+    status: 'En cours',
+    type: 'Boucle',
+    freq: d.freq,
+    category: 'Autre',
+    autonomy: 'autonome',
+    permanent: true,
+    ideas: [...d.ideas],
+  }));
+  return [...extra, ...baseLoops(pid, pname)];
+}
+function baseLoops(pid, pname) {
   return [
     {
       id: pid + '-mails',
