@@ -256,7 +256,7 @@ function selectProject(id) {
 function openProjectPicker() {
   modal(
     'Choisir un projet',
-    `<p class="note">Un point rouge signale qu’une action attend ta décision.</p><div class="grid">${projects
+    `<p class="note">Un point doré signale que quelque chose t’attend dans le projet. Un point gris : projet en pause.</p><div class="grid">${projects
       .map((p) => {
         let c = p.id === projectId ? projectColor(data) : projectColorFor(p.id);
         return `<button style="text-align:left;padding:17px" onclick="selectProject('${p.id}')"><span class="tiny">${colorDot(c)}${esc(p.type)}</span><h3>${esc(p.name)}</h3><p class="note">${esc(p.description)}</p>${p.id === projectId ? pill('Projet actif') : ''}</button>`;
@@ -285,7 +285,7 @@ function pill(s) {
     ? 'green'
     : /Flop|Rejeté|Bloqué/.test(s)
       ? 'red'
-      : /moyenne|attente|À valider|Proposée|En cours/.test(s)
+      : /attente|À valider|Proposée/.test(s)
         ? 'yellow'
         : 'gold';
   return `<span class="badge ${c}">${esc(s)}</span>`;
@@ -311,7 +311,7 @@ document.getElementById('dialog').addEventListener('click', (e) => {
   if (e.target.id === 'dialog') closeDialog();
 });
 function head(title, desc, action = '') {
-  return `<div class="heading"><div><div class="tiny" style="margin-bottom:8px">${esc(projectDef.name.toUpperCase())} / ÉTAPE 0${page + 1}</div><h1>${title}</h1><p class="intro">${desc}</p></div>${action}</div>`;
+  return `<div class="heading"><div><h1>${title}</h1><p class="intro">${desc}</p></div>${action}</div>`;
 }
 function cardTask(t) {
   let proposal = stopBanner(t) + proposalCard(t);
@@ -1755,8 +1755,10 @@ function projectColor(d) {
   return 'vert';
 }
 function colorDot(c) {
-  let m = { rouge: '#e06c6c', vert: '#5fbf7d', gris: '#8a8a8a' };
-  return `<span class="cdot" style="background:${m[c]}" title="${c === 'rouge' ? 'Quelque chose t’attend' : c === 'gris' ? 'En pause' : 'Rien à faire'}"></span>`;
+  // Doré : ça t'attend · gris : en pause · rien à faire : pas de pastille (on ne cherche que le doré).
+  if (c === 'vert') return '';
+  let m = { rouge: 'var(--wait)', gris: 'var(--idle)' };
+  return `<span class="cdot" style="background:${m[c]}" title="${c === 'rouge' ? 'Quelque chose t’attend' : 'En pause'}"></span>`;
 }
 function projectColorFor(id) {
   try {
@@ -1878,30 +1880,57 @@ function setLessonState(taskId, idx, st) {
   }
 }
 
+// Ce qui attend Walid dans le projet actif (doré). Sert à la barre du haut et aux pastilles du menu.
+function waitingCounts(d = data) {
+  let tasks = d.tasks || [];
+  return {
+    planification: tasks.filter((t) => taskColor(t) === 'rouge').length,
+    revision: tasks.filter((t) => stateIsAwaitingWalid(t)).length,
+    resultats: (d.kpis || []).filter((k) => k.status === 'propose').length,
+  };
+}
+function waitingSentence(n) {
+  if (!n) return 'Rien ne t’attend dans ce projet';
+  const mots = ['', 'Une chose', 'Deux choses', 'Trois choses', 'Quatre choses', 'Cinq choses'];
+  return (mots[n] || n + ' choses') + (n > 1 ? ' t’attendent' : ' t’attend') + ' dans ce projet';
+}
+function navLink(slug, label, active, waits) {
+  return `<a href="#${slug}" class="${active ? 'active' : ''}"${active ? ' aria-current="page"' : ''}>${label}${
+    waits ? '<span class="wait-dot" title="Quelque chose t’attend ici" aria-label="(quelque chose t’attend)"></span>' : ''
+  }</a>`;
+}
 function render() {
   if (!moneyData) moneyData = loadMoney();
   let hash = location.hash.slice(1);
   let isMoney = hash === moneyPage.slug;
   let idx = slugs.indexOf(hash);
   page = idx < 0 ? 0 : idx;
+  let w = waitingCounts();
+  let stepOn = (i) => !isMoney && slugs.includes(hash || 'planification') && i === page;
   document.getElementById('nav').innerHTML =
-    pages
-      .map(
-        (p, i) =>
-          `<a href="#${slugs[i]}" class="${!isMoney && i === page ? 'active' : ''}"><span class="num">0${i + 1}</span>${p}</a>`,
-      )
-      .join('') +
-    `<a href="#${moneyPage.slug}" class="${isMoney ? 'active' : ''}" style="margin-top:14px;border-top:1px solid var(--line);padding-top:14px"><span class="num">€</span>${moneyPage.name}</a>`;
+    `<div class="nav-group"><div class="nav-title">Cycle de travail</div>${pages
+      .map((p, i) => navLink(slugs[i], p, stepOn(i), w[slugs[i]] > 0))
+      .join('')}</div>` +
+    `<div class="nav-group">${navLink('resultats', 'Résultats', hash === 'resultats', w.resultats > 0)}${navLink(
+      'historique',
+      'Historique',
+      hash === 'historique',
+      false,
+    )}</div>` +
+    `<div class="nav-group"><div class="nav-title">Hors projet</div>${navLink(moneyPage.slug, 'Argent — tous projets', isMoney, false)}</div>`;
   document.getElementById('breadcrumb').textContent = isMoney ? moneyPage.name : pages[page];
+  document.getElementById('activeProject').textContent = projectDef.name;
+  let total = w.planification + w.revision + w.resultats;
+  document.getElementById('activeDot').innerHTML = colorDot(total ? 'rouge' : projectColor(data));
+  document.querySelector('.projectSelectWrap').hidden = isMoney;
+  document.getElementById('waitSummary').textContent = waitingSentence(total);
   if (isMoney) {
-    document.getElementById('activeProject').textContent = projectDef.name;
     main.innerHTML = moneyPageHtml();
     return;
   }
-  document.getElementById('activeProject').textContent = projectDef.name;
   main.innerHTML =
     [planning, execution, verification, memory, priorities, revision][page]() +
-    `<details style="margin-top:32px;border-top:1px solid var(--line);padding-top:18px"><summary style="cursor:pointer;color:var(--gold)">Une remarque sur cette page ?</summary><p class="note">Tes remarques restent liées à cette étape.</p><textarea placeholder="Il manque… / Je voudrais voir…" oninput="note(this.value)">${esc(data.notes[page] || '')}</textarea><div class="actions">${btn('Télécharger mes remarques', 'downloadNotes()')}</div></details><div class="page-bottom">${page ? btn('← ' + pages[page - 1], `go(${page - 1})`) : '<span></span>'}${page < 5 ? btn(pages[page + 1] + ' →', `go(${page + 1})`) : btn('Retour à la planification ↻', 'go(0)')}</div>`;
+    `<details style="margin-top:32px;border-top:1px solid var(--line);padding-top:18px"><summary style="cursor:pointer;color:var(--text-3)">Une remarque sur cette page ?</summary><p class="note">Tes remarques restent liées à cette étape.</p><textarea placeholder="Il manque… / Je voudrais voir…" oninput="note(this.value)">${esc(data.notes[page] || '')}</textarea><div class="actions">${btn('Télécharger mes remarques', 'downloadNotes()')}</div></details><div class="page-bottom">${page ? btn('← ' + pages[page - 1], `go(${page - 1})`) : '<span></span>'}${page < 5 ? btn(pages[page + 1] + ' →', `go(${page + 1})`) : btn('Retour à la planification ↻', 'go(0)')}</div>`;
 }
 function setCategory(f) {
   categoryFilter = f;

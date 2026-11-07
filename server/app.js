@@ -19,6 +19,7 @@ const MIME = {
   '.css': 'text/css; charset=utf-8',
   '.svg': 'image/svg+xml',
   '.ico': 'image/x-icon',
+  '.woff2': 'font/woff2',
 };
 
 // Pages accessibles sans être connecté.
@@ -328,7 +329,7 @@ export function createApp({
       }
       if (path.startsWith('/api/')) return await handleApi(req, res, path);
       if (req.method !== 'GET' && req.method !== 'HEAD') throw new HttpError(405, 'Méthode non permise.');
-      if (!PUBLIC_PATHS.has(path) && !isAuthed(req)) {
+      if (!PUBLIC_PATHS.has(path) && !/^\/fonts\/[\w.-]+\.woff2$/.test(path) && !isAuthed(req)) {
         if (path === '/' || path.endsWith('.html')) {
           res.writeHead(302, { Location: '/login', 'Cache-Control': 'no-store' });
           return res.end();

@@ -21,7 +21,8 @@
     const el = statusEl();
     if (!el) return;
     el.textContent = text;
-    el.className = 'badge' + (kind ? ' ' + kind : '');
+    // L'état d'enregistrement reste neutre ; seul « hors ligne » se colore (terre cuite).
+    el.className = 'badge' + (kind === 'red' ? ' red' : '');
   }
 
   async function api(method, url, body) {

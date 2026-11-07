@@ -196,12 +196,18 @@ const baseRender = render;
 render = function () {
   const isHistory = location.hash.slice(1) === HISTORY_SLUG;
   baseRender();
-  const nav = document.getElementById('nav');
-  if (isHistory) nav.querySelectorAll('a.active').forEach((a) => a.classList.remove('active'));
-  nav.insertAdjacentHTML(
-    'beforeend',
-    `<a href="#${HISTORY_SLUG}" class="${isHistory ? 'active' : ''}"><span class="num">⏱</span>Historique</a>`,
-  );
+  if (isHistory) {
+    const nav = document.getElementById('nav');
+    nav.querySelectorAll('a.active').forEach((a) => {
+      a.classList.remove('active');
+      a.removeAttribute('aria-current');
+    });
+    const me = nav.querySelector(`a[href="#${HISTORY_SLUG}"]`);
+    if (me) {
+      me.classList.add('active');
+      me.setAttribute('aria-current', 'page');
+    }
+  }
   if (isHistory) {
     document.getElementById('breadcrumb').textContent = 'Historique';
     main.innerHTML = historyPage();
