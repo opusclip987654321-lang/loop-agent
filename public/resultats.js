@@ -91,7 +91,10 @@ function resultsPage() {
     }`;
     const name = `<td class="kname"><span class="kn">${esc(k.name)}</span>${k.unit ? ` <span class="note">(${esc(k.unit)})</span>` : ''}<br><span class="note">${sub}</span> <button class="linkbtn" onclick="addKpiValue('${k.id}')">+ mesure</button></td>`;
     if (!mine.some((v) => !v.unavailable && typeof v.value === 'number') && cells.every((v) => v === null)) {
-      return `<tr>${name}<td colspan="${keys.length}" class="never">Jamais mesuré — personne ne relève ce chiffre</td><td class="ktrend">${btn(
+      const why = mine.length
+        ? `Indisponible jusqu’ici${last.origin ? ' — ' + esc(last.origin) : ''}`
+        : 'Jamais mesuré — personne ne relève ce chiffre';
+      return `<tr>${name}<td colspan="${keys.length}" class="never">${why}</td><td class="ktrend">${btn(
         'Relever ce chiffre',
         `addKpiValue('${k.id}')`,
         'wait-outline',
