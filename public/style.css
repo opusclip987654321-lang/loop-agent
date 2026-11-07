@@ -1245,3 +1245,254 @@ button.wait-outline {
     min-width: 760px;
   }
 }
+
+/* ---------- Cartes d'action (maquettes Planification, Exécution, Mémoire, Révision) ---------- */
+.cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
+  gap: 14px;
+}
+.ahead {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 6px 14px;
+  flex-wrap: wrap;
+  margin-bottom: 10px;
+}
+.astate {
+  font-size: 13px;
+  font-weight: 500;
+}
+.ahead .note {
+  font-size: 12px;
+}
+.acard h3,
+.acard h2 {
+  margin: 0 0 8px;
+  font-size: 17px;
+  font-weight: 600;
+}
+.card.cgrey .astate,
+.card.cgrey .adesc {
+  color: var(--muted);
+}
+.adesc {
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.55;
+  color: var(--text-2);
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.acard .strip {
+  margin: 14px 0 0;
+}
+.acard .actions {
+  margin-top: 14px;
+}
+.objline {
+  margin-top: 12px;
+  font-size: 13px;
+  color: var(--text-2);
+}
+.objbar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 8px;
+  font-size: 13px;
+}
+.objbar .progress {
+  flex: 1;
+  margin: 0;
+}
+.strip.banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  margin-bottom: 26px;
+}
+.strip.banner p {
+  margin: 6px 0 0;
+  font-size: 14px;
+  line-height: 1.55;
+  color: var(--text-2);
+}
+.strip.banner > div > strong {
+  color: var(--wait);
+  font-size: 15px;
+  font-weight: 600;
+}
+.strip.banner.down {
+  border-color: var(--down);
+}
+.strip.banner.down > div > strong {
+  color: var(--down);
+}
+.section-title {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  margin: 0 0 14px;
+}
+.section-title .note {
+  font-size: 13px;
+}
+.quiet-list {
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  overflow: hidden;
+}
+.quiet-list > div {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 14px 18px;
+  background: #131416;
+  border-bottom: 1px solid var(--line-soft);
+  font-size: 14px;
+}
+.quiet-list > div:last-child {
+  border-bottom: 0;
+}
+.quiet-list .qt {
+  color: var(--text-3);
+}
+@media (max-width: 640px) {
+  .cards {
+    grid-template-columns: 1fr;
+  }
+  .strip.banner {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+  .quiet-list > div {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+}
+
+/* ---------- Priorités ---------- */
+.prio {
+  list-style: none;
+  margin: 0 0 26px;
+  padding: 0;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  overflow: hidden;
+}
+.prio li {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 16px 18px;
+  border-bottom: 1px solid var(--line-soft);
+  background: var(--panel);
+  font-size: 13px;
+}
+.prio li:nth-child(even) {
+  background: #131416;
+}
+.prio li:last-child {
+  border-bottom: 0;
+}
+.prio .rank {
+  min-width: 18px;
+}
+.prio .pt {
+  font-size: 15px;
+  font-weight: 500;
+  margin-bottom: 3px;
+}
+.prio .pm {
+  display: flex;
+  gap: 6px;
+}
+.prio .pm button {
+  min-width: 40px;
+  min-height: 40px;
+}
+
+/* ---------- Historique ---------- */
+.htable {
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--panel);
+}
+.htable table {
+  min-width: 760px;
+  font-size: 14px;
+}
+.htable th {
+  font-weight: 500;
+  font-size: 12px;
+  color: var(--muted);
+  padding: 14px 18px;
+}
+.htable td {
+  padding: 16px 18px;
+  border-bottom: 1px solid var(--line-soft);
+  vertical-align: top;
+}
+.htable tbody tr:nth-child(even) {
+  background: var(--panel-alt);
+}
+.htable tbody tr:last-child td {
+  border-bottom: 0;
+}
+.htable .hd {
+  color: var(--text-3);
+  white-space: nowrap;
+}
+.htable .ht {
+  font-weight: 500;
+  margin-bottom: 3px;
+}
+.htable .hl {
+  text-align: right;
+  white-space: nowrap;
+}
+.htable .hb {
+  display: inline-flex;
+  gap: 6px;
+  margin-left: 12px;
+}
+
+/* ---------- Argent ---------- */
+.tile {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 18px 20px;
+  margin-bottom: 16px;
+}
+.mgrid .tile {
+  margin-bottom: 0;
+}
+.tile.cwait {
+  border-color: var(--line-strong);
+}
+.mtbl tbody tr:nth-child(even) {
+  background: var(--panel-alt);
+}
+[hidden] {
+  display: none !important;
+}
+.filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.filters button.active {
+  background: var(--raised-2);
+  border-color: var(--line-strong);
+  color: var(--text);
+}
+#syncStatus {
+  margin-left: auto;
+}

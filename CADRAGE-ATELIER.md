@@ -60,6 +60,8 @@ Le type est visible sur la carte de l'action. **[Décidé]**
 
 C'est la règle qui évite que la liste gonfle : seules les ponctuelles s'accumulent, et seules elles sortent. **[Décidé]**
 
+Précision (refonte du 07/11/2026) : en Exécution, une ponctuelle terminée et une action en pause passent dans un bloc séparé « Ce qui ne tourne plus », lisible mais hors de « Ce qui tourne », avec un lien vers ce qu'elle a appris. **[Décidé]**
+
 ### Cas de Petites Histoires Vraies
 - Une **vidéo longue** = une action ponctuelle, avec ses étapes (texte, dessins, montage, date de diffusion). **[Décidé]**
 - Un **Short** = une idée à l'intérieur de l'action de la vidéo dont il découle. **[Décidé]**
