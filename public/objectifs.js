@@ -279,5 +279,64 @@ detail = function (id, showTools = false) {
   if (box) box.insertAdjacentHTML('beforeend', btn('⧉ Copier dans d’autres projets', `copyActionDialog('${t.id}')`));
 };
 
+// ---------- Premier résultat à valider (choix A de Walid, 07/11/2026) ----------
+// Une action « première fois à valider » (par exemple créée par Walid) tourne une
+// première fois ; l'agent attend ensuite que Walid valide ce premier résultat.
+function firstRunStrip(t) {
+  if (!t.firstRunPending) return '';
+  const last = (t.reviewHistory || []).find((h) => h.by === 'agent') || {};
+  return `<section class="strip red"><strong>🔎 Premier résultat à valider</strong>${
+    last.aiObservation ? `<p><span class="note">Ce que l’agent a fait :</span> ${esc(last.aiObservation)}</p>` : ''
+  }${last.aiDecision ? `<p><span class="note">Ce qu’il en conclut :</span> ${esc(last.aiDecision)}</p>` : ''}${
+    last.plan ? `<p><span class="note">La suite qu’il propose :</span> ${esc(last.plan)}</p>` : ''
+  }<p class="note">L’action attend ta réponse avant de continuer.</p><div class="actions">${btn(
+    '✅ Valider : elle tourne seule',
+    `validateFirstRun('${t.id}')`,
+    'good',
+  )}${btn('✏️ Refaire avec mes remarques', `redoFirstRun('${t.id}')`)}</div></section>`;
+}
+function validateFirstRun(id) {
+  const t = task(id);
+  if (!t) return;
+  t.firstRunPending = false;
+  t.autonomy = 'autonome';
+  t.firstRunValidatedAt = new Date().toISOString();
+  save();
+  render();
+  notify('Premier résultat validé : l’action tourne désormais seule.');
+}
+function redoFirstRun(id) {
+  const t = task(id);
+  if (!t) return;
+  modal(
+    'Refaire le premier tour',
+    `<p><strong>${esc(t.title)}</strong></p><label for="redoMsg">Ce que l’agent doit changer</label><textarea id="redoMsg" placeholder="Ex. : commence par me proposer 3 identités possibles avant les visuels…"></textarea><p class="note">L’agent lira ta remarque, refera un premier tour et te le montrera à nouveau.</p><div class="actions">${btn(
+      'Envoyer',
+      `confirmRedoFirstRun('${t.id}')`,
+      'primary',
+    )}${btn('Annuler', 'closeDialog()')}</div>`,
+  );
+}
+function confirmRedoFirstRun(id) {
+  const t = task(id);
+  const msg = (document.getElementById('redoMsg')?.value || '').trim();
+  if (!msg) return notify('Écris ce que l’agent doit changer.');
+  (t.reviewConversation = t.reviewConversation || []).push({ role: 'Walid', date: new Date().toISOString().slice(0, 10), text: msg, correctionType: 'Premier tour à refaire' });
+  t.firstRunPending = false;
+  save();
+  closeDialog();
+  render();
+  notify('Remarque envoyée : l’agent refera un premier tour.');
+}
+const baseProposalCardFirst = proposalCard;
+proposalCard = function (t) {
+  return firstRunStrip(t) + baseProposalCardFirst(t);
+};
+const baseTaskColorFirst = taskColor;
+taskColor = function (t) {
+  if (t.firstRunPending && t.status !== 'En pause') return 'rouge';
+  return baseTaskColorFirst(t);
+};
+
 // Premier affichage avec les objectifs.
 render();

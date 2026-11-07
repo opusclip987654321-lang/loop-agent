@@ -378,6 +378,38 @@ test('connecteur : indicateurs clés, mesures et bilans', async () => {
   assert.equal(r.out.derniers_bilans[0].action_decisive.title, 'Surveiller les statistiques');
 });
 
+test('action créée par Walid : un premier tour, puis attente de sa validation', async () => {
+  const cur = db.getDoc('project:vegebudget');
+  const doc = cur ? JSON.parse(cur.value) : { tasks: [], priorities: [], memories: [] };
+  const v = cur ? cur.version : 0;
+  doc.tasks.push({ id: 'walid-avatar', title: 'Avatar Instagram', origin: 'Walid', owner: 'Agent', type: 'Boucle', ideas: [] });
+  assert.ok(db.putDoc('project:vegebudget', JSON.stringify(doc), v, 'walid').ok);
+
+  let r = await call('lire_projet', { projet: 'vegebudget' });
+  let a = r.out.actions.find((x) => x.id === 'walid-avatar');
+  assert.equal(a.autonomie, 'première fois à valider');
+  assert.match(a.premier_resultat, /fais-la tourner une première fois/);
+
+  r = await call('ecrire_tour', { projet: 'vegebudget', action: 'walid-avatar', constat: '3 identités proposées.', decision: 'Attendre le choix de Walid.' });
+  assert.equal(r.isError, false);
+  assert.match(r.out, /Premier tour enregistré/);
+  r = await call('ecrire_tour', { projet: 'vegebudget', action: 'walid-avatar', constat: 'a', decision: 'b' });
+  assert.equal(r.isError, true, 'deuxième tour bloqué tant que Walid n’a pas validé');
+  r = await call('lire_projet', { projet: 'vegebudget' });
+  a = r.out.actions.find((x) => x.id === 'walid-avatar');
+  assert.equal(a.couleur, 'rouge');
+  assert.match(a.premier_resultat, /en attente/);
+
+  // Walid valide : l'action tourne seule.
+  const d2 = JSON.parse(db.getDoc('project:vegebudget').value);
+  const t = d2.tasks.find((x) => x.id === 'walid-avatar');
+  t.firstRunPending = false;
+  t.autonomy = 'autonome';
+  assert.ok(db.putDoc('project:vegebudget', JSON.stringify(d2), db.getDoc('project:vegebudget').version, 'walid').ok);
+  r = await call('ecrire_tour', { projet: 'vegebudget', action: 'walid-avatar', constat: 'a', decision: 'b' });
+  assert.equal(r.out, 'Tour enregistré sur « Avatar Instagram ».');
+});
+
 test('connecteur : lecture d’une facture déposée', async () => {
   const { cookie } = await login();
   const png = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 1, 2, 3]);

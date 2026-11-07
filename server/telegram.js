@@ -18,7 +18,9 @@ function short(s, max = MAX_LINE) {
 export function describeEvent(tool, args = {}) {
   switch (tool) {
     case 'ecrire_tour':
-      return { line: `▸ ${args.action} : ${short(args.constat)}`, needsOk: false };
+      return args.premier_tour
+        ? { line: `🔴 Premier résultat à valider sur ${args.action} : ${short(args.constat)}`, needsOk: true }
+        : { line: `▸ ${args.action} : ${short(args.constat)}`, needsOk: false };
     case 'proposer_action':
       return { line: `🔴 Nouvelle action à valider : ${short(args.titre, 120)}`, needsOk: true };
     case 'proposer_modification':
