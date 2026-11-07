@@ -209,7 +209,7 @@ test('connecteur : initialize et liste des outils', async () => {
   assert.equal(init.json.result.serverInfo.name, 'loop-agent');
   assert.match(init.json.result.instructions, /ne commande JAMAIS rien/);
   const tools = (await mcp('tools/list', {})).json.result.tools.map((t) => t.name);
-  for (const n of ['lister_projets', 'lire_projet', 'ecrire_tour', 'proposer_action', 'proposer_modification', 'proposer_idee', 'noter_lecon', 'changer_statut_lecon', 'signaler_acces', 'factures_a_lire', 'lire_facture', 'enregistrer_facture', 'enregistrer_resultat'])
+  for (const n of ['lister_projets', 'lire_projet', 'ecrire_tour', 'proposer_action', 'proposer_modification', 'proposer_idee', 'noter_lecon', 'changer_statut_lecon', 'signaler_acces', 'factures_a_lire', 'lire_facture', 'enregistrer_facture', 'enregistrer_resultat', 'proposer_indicateur', 'enregistrer_indicateur', 'ecrire_bilan'])
     assert.ok(tools.includes(n), n);
 });
 
@@ -347,6 +347,35 @@ test('connecteur : objectif et résultats mesurés', async () => {
   assert.equal(r.out.avancement.volume_cumule, 210);
   assert.equal(r.out.avancement.seuil_atteint, true);
   assert.match(r.out.avancement.consigne, /juge maintenant/);
+});
+
+test('connecteur : indicateurs clés, mesures et bilans', async () => {
+  let r = await call('proposer_indicateur', { projet: 'nourmeet', nom: 'Inscrits', unite: 'inscrits', calcul: 'somme', pourquoi: 'Dit si le site attire.' });
+  assert.equal(r.isError, false);
+  const kpi = r.out.id;
+  // Pas validé : pas de mesure.
+  r = await call('enregistrer_indicateur', { projet: 'nourmeet', indicateur: kpi, valeur: 3, d_ou: 'admin' });
+  assert.equal(r.isError, true);
+  const doc = JSON.parse(db.getDoc('project:nourmeet').value);
+  const v = db.getDoc('project:nourmeet').version;
+  doc.kpis[0].status = 'valide';
+  assert.ok(db.putDoc('project:nourmeet', JSON.stringify(doc), v, 'walid').ok);
+  r = await call('enregistrer_indicateur', { projet: 'nourmeet', indicateur: kpi, d_ou: 'admin' });
+  assert.match(r.out, /jamais 0/);
+  r = await call('enregistrer_indicateur', { projet: 'nourmeet', indicateur: kpi, valeur: 3, d_ou: 'admin' });
+  assert.equal(r.isError, false);
+  r = await call('lire_projet', { projet: 'nourmeet' });
+  assert.equal(r.out.indicateurs[0].semaine_en_cours, 3);
+  assert.equal(r.out.indicateurs[0].semaine_precedente, 'indisponible');
+  assert.equal(r.out.bilans_a_ecrire.length, 5);
+  const due = r.out.bilans_a_ecrire[0];
+  r = await call('ecrire_bilan', { projet: 'nourmeet', periode_type: 'semaine', periode: '2026-11', pourquoi: 'x' });
+  assert.equal(r.isError, true, 'clé de mois pour une semaine : refusée');
+  r = await call('ecrire_bilan', { projet: 'nourmeet', periode_type: due.periode_type, periode: due.periode, pourquoi: '3 inscrits, première semaine mesurée.', action_decisive: 'nourmeet-stats', action_decisive_texte: 'Le suivi a commencé.' });
+  assert.equal(r.isError, false);
+  r = await call('lire_projet', { projet: 'nourmeet' });
+  assert.equal(r.out.bilans_a_ecrire.length, 4);
+  assert.equal(r.out.derniers_bilans[0].action_decisive.title, 'Surveiller les statistiques');
 });
 
 test('connecteur : lecture d’une facture déposée', async () => {

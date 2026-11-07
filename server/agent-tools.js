@@ -15,6 +15,10 @@ import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { PROJECTS } from './projects.js';
 import { defaultProjectDoc, defaultMoneyDoc, newIdea } from './defaults.js';
+import '../public/periodes.js';
+
+const P = globalThis.LAPeriodes;
+const KPI_AGG = ['somme', 'dernier'];
 
 const STAGES = ['Planification', 'Exécution', 'Vérification', 'Mémoire', 'Priorités', 'Révision'];
 const LESSON_STATES = ['à tester', 'confirmée', 'invalidée'];
@@ -204,6 +208,36 @@ function round(n) {
   return Math.round(n * 100) / 100;
 }
 
+// ---------- Indicateurs clés et bilans (page Résultats, §4) ----------
+function kpisView(doc) {
+  const vals = doc.kpiValues || [];
+  return (doc.kpis || []).map((k) => {
+    const cur = P.lastKeys('semaine', 2);
+    const fmt = (v) => (v === null ? 'indisponible' : v);
+    return {
+      id: k.id,
+      nom: k.name,
+      unite: k.unit || undefined,
+      calcul: k.agg,
+      sens: k.direction,
+      statut: k.status === 'valide' ? 'validé par Walid' : k.status === 'refuse' ? 'refusé par Walid' : 'proposé, attend Walid',
+      semaine_precedente: fmt(P.kpiValue(k, vals, cur[0], 'semaine')),
+      semaine_en_cours: fmt(P.kpiValue(k, vals, cur[1], 'semaine')),
+      derniere_mesure: (vals.find((v) => v.kpi === k.id) || {}).date,
+    };
+  });
+}
+// Bilans dus : la période précédente (semaine, mois…) n'a pas encore de bilan.
+function missingBilans(doc) {
+  if (!(doc.kpis || []).some((k) => k.status === 'valide')) return [];
+  const out = [];
+  for (const g of P.GRANS) {
+    const prev = P.lastKeys(g, 2)[0];
+    if (!(doc.bilans || []).some((b) => b.gran === g && b.period === prev)) out.push({ periode_type: g, periode: prev, libelle: P.label(prev, g) });
+  }
+  return out;
+}
+
 export function createAgentTools({ db, dataDir, onAgentWrite = () => {}, onToolDone = () => {} }) {
   function readProject(projectId) {
     const p = findProject(projectId);
@@ -317,6 +351,9 @@ export function createAgentTools({ db, dataDir, onAgentWrite = () => {}, onToolD
             derniers_tours: (t.reviewHistory || []).slice(0, 3),
             messages_de_walid: (t.reviewConversation || []).filter((m) => m.role === 'Walid').slice(-5),
           })),
+          indicateurs: kpisView(doc),
+          bilans_a_ecrire: missingBilans(doc),
+          derniers_bilans: (doc.bilans || []).slice(0, 4).map((b) => ({ periode: b.gran + ' ' + b.period, pourquoi: b.why, action_decisive: b.decisive || undefined, par: b.by })),
           memoire: (doc.memories || []).map((m, index) => ({
             index,
             id: m.id,
@@ -573,6 +610,116 @@ export function createAgentTools({ db, dataDir, onAgentWrite = () => {}, onToolD
       },
     },
     {
+      name: 'proposer_indicateur',
+      description:
+        'Propose un INDICATEUR CLÉ du projet pour la page Résultats (ex. « Mails envoyés », « Rendez-vous obtenus », « Taux de clics des couvertures »). Pas une tâche : un chiffre qui dit si le projet avance. Il attend la validation de Walid. 3 à 6 indicateurs par projet suffisent.',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          projet: { type: 'string' },
+          nom: { type: 'string' },
+          unite: { type: 'string', description: 'Ex. « mails », « % », « € ».' },
+          calcul: { type: 'string', enum: KPI_AGG, description: 'somme = on additionne sur la période (mails envoyés) ; dernier = on garde la dernière mesure (abonnés, taux).' },
+          sens: { type: 'string', enum: DIRECTIONS, description: 'Ce qui est un progrès : augmenter ou réduire.' },
+          pourquoi: { type: 'string', description: 'Pourquoi cet indicateur dit si le projet avance, et d’où viendra le chiffre.' },
+        },
+        required: ['projet', 'nom', 'calcul', 'pourquoi'],
+      },
+      handler(args) {
+        return mutateProject(args.projet, agentName(args), (doc) => {
+          const name = text(args.nom, 'nom', { max: 120 });
+          doc.kpis = doc.kpis || [];
+          if (doc.kpis.some((k) => k.name.toLowerCase() === name.toLowerCase() && k.status !== 'refuse'))
+            throw new ToolError(`L’indicateur « ${name} » existe déjà (voir lire_projet → indicateurs).`);
+          const k = {
+            id: uid('kpi'),
+            name,
+            unit: text(args.unite, 'unite', { max: 40, required: false }),
+            agg: oneOf(args.calcul, 'calcul', KPI_AGG),
+            direction: oneOf(args.sens, 'sens', DIRECTIONS, 'augmenter'),
+            why: text(args.pourquoi, 'pourquoi', { max: 1000 }),
+            status: 'propose',
+            by: 'agent',
+            at: nowIso(),
+          };
+          doc.kpis.push(k);
+          return { id: k.id, message: 'Indicateur proposé : il attend la validation de Walid.' };
+        });
+      },
+    },
+    {
+      name: 'enregistrer_indicateur',
+      description:
+        'Enregistre une mesure d’un indicateur clé VALIDÉ. Pour un indicateur « somme », donne ce qui s’est passé ce jour-là ou depuis la dernière mesure (pas un cumul) ; pour « dernier », la valeur du moment. Donnée absente = indisponible:true, JAMAIS 0. Dis d’où vient le chiffre.',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          projet: { type: 'string' },
+          indicateur: { type: 'string', description: 'id de l’indicateur (lire_projet → indicateurs).' },
+          valeur: { type: 'number' },
+          indisponible: { type: 'boolean' },
+          date: { type: 'string', description: 'AAAA-MM-JJ du jour mesuré (par défaut aujourd’hui).' },
+          d_ou: { type: 'string', description: 'Source exacte du chiffre.' },
+          note: { type: 'string' },
+        },
+        required: ['projet', 'indicateur', 'd_ou'],
+      },
+      handler(args) {
+        return mutateProject(args.projet, agentName(args), (doc) => {
+          const k = (doc.kpis || []).find((x) => x.id === args.indicateur);
+          if (!k) throw new ToolError('Indicateur inconnu (voir lire_projet → indicateurs).');
+          if (k.status !== 'valide') throw new ToolError('Cet indicateur n’est pas validé par Walid : pas de mesure tant qu’il ne l’a pas validé.');
+          const date = args.date ? String(args.date) : today();
+          if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) throw new ToolError('« date » doit être au format AAAA-MM-JJ.');
+          const v = { id: uid('mes'), kpi: k.id, date, at: nowIso(), source: 'agent', origin: text(args.d_ou, 'd_ou', { max: 300 }) };
+          if (args.note) v.note = text(args.note, 'note', { max: 500 });
+          if (args.indisponible === true) v.unavailable = true;
+          else if (args.valeur === undefined) throw new ToolError('Donne « valeur », ou indisponible:true si la donnée manque (jamais 0 à la place).');
+          else v.value = num(args.valeur, 'valeur');
+          (doc.kpiValues = doc.kpiValues || []).unshift(v);
+          doc.kpiValues = doc.kpiValues.slice(0, 3000);
+          return 'Mesure enregistrée.';
+        });
+      },
+    },
+    {
+      name: 'ecrire_bilan',
+      description:
+        'Écrit le bilan d’une période terminée pour la page Résultats : POURQUOI le projet a progressé ou reculé par rapport à la période précédente, chiffres des indicateurs à l’appui, et l’action qui a changé la donne s’il y en a une. Voir lire_projet → bilans_a_ecrire. Un bilan réécrit remplace le précédent de la même période.',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          projet: { type: 'string' },
+          periode_type: { type: 'string', enum: P.GRANS },
+          periode: { type: 'string', description: 'Clé de la période (ex. 2026-W45, 2026-11, 2026-Q4, 2026-H2, 2026), voir bilans_a_ecrire.' },
+          pourquoi: { type: 'string', description: 'L’explication, chiffres à l’appui. Si une donnée manque, dis-le (indisponible), n’invente rien.' },
+          action_decisive: { type: 'string', description: 'id de l’action qui a fait passer le projet à un autre niveau, s’il y en a une.' },
+          action_decisive_texte: { type: 'string', description: 'En une phrase : ce que cette action a changé.' },
+        },
+        required: ['projet', 'periode_type', 'periode', 'pourquoi'],
+      },
+      handler(args) {
+        return mutateProject(args.projet, agentName(args), (doc) => {
+          const gran = oneOf(args.periode_type, 'periode_type', P.GRANS);
+          const period = text(args.periode, 'periode', { max: 12 });
+          const st = P.start(period, gran);
+          if (Number.isNaN(st.getTime()) || P.periodKey(st.toISOString().slice(0, 10), gran) !== period)
+            throw new ToolError('« periode » ne correspond pas au type (ex. semaine 2026-W45, mois 2026-11, trimestre 2026-Q4, semestre 2026-H2, année 2026).');
+          let decisive;
+          if (args.action_decisive) {
+            const t = (doc.tasks || []).find((x) => x.id === args.action_decisive);
+            if (!t) throw new ToolError('Action décisive inconnue (voir lire_projet → actions).');
+            decisive = { action: t.id, title: t.title, text: text(args.action_decisive_texte, 'action_decisive_texte', { max: 500, required: false }) };
+          }
+          const b = { id: uid('bilan'), gran, period, why: text(args.pourquoi, 'pourquoi', { max: 3000 }), decisive, by: 'agent', at: nowIso() };
+          doc.bilans = (doc.bilans || []).filter((x) => !(x.gran === gran && x.period === period && x.by === 'agent'));
+          doc.bilans.unshift(b);
+          doc.bilans = doc.bilans.slice(0, 400);
+          return `Bilan enregistré (${P.label(period, gran)}).`;
+        });
+      },
+    },
+    {
       name: 'noter_lecon',
       description:
         'Ajoute une leçon à la mémoire du projet (cadrage §10), avec les chiffres qui la fondent. La mémoire est rangée par projet ; « action » indique l’action qui l’a produite.',
@@ -772,4 +919,5 @@ export const CONNECTOR_INSTRUCTIONS = `Loop Agent est le tableau de bord des bou
 7. Mesure : chaque action a un objectif (chiffre, fait_pas_fait ou a_observer avec seuil). À chaque tour où tu as un chiffre, enregistrer_resultat avec sa source. Donnée absente = indisponible, jamais 0. Quand un seuil est atteint ou un écart constaté, juge et note la leçon.
 8. Réfléchis comme un analyste de l'internaute, pas comme un compteur. Peu de résultats ne veut pas dire « ça ne marche pas » : trouve à quelle étape la personne décroche. Mail pas ouvert → analyse l'objet. Ouvert sans clic → analyse le contenu. Clic puis départ → analyse le site. Examine si une offre gratuite changerait la donne. Propose de vraies alternatives à tester, pas des constats.
 9. Lis les règles d'or du projet (regles dans lire_projet) : ce sont des décisions de Walid.
+10. Résultats : propose 3 à 6 indicateurs clés par projet (proposer_indicateur) s'il n'y en a pas ; mesure les indicateurs validés à chaque tour (enregistrer_indicateur) ; écris les bilans dus (lire_projet → bilans_a_ecrire) avec ecrire_bilan : pourquoi on a progressé ou reculé par rapport à la période précédente, et l'action qui a changé la donne.
 Jamais de mot de passe, de clé ni de jeton dans ce que tu écris.`;

@@ -234,10 +234,12 @@
       if (!r.ok) throw new Error('Erreur ' + r.status);
       window.LA = createStore(await r.json());
       await loadScript('/merge.js');
+      await loadScript('/periodes.js');
       await loadScript('/app.js');
       await loadScript('/glue.js');
       await loadScript('/historique.js');
       await loadScript('/objectifs.js');
+      await loadScript('/resultats.js');
       setStatus('Enregistré', 'green');
     } catch (e) {
       const main = document.getElementById('main');

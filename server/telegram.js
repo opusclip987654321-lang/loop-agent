@@ -40,6 +40,10 @@ export function describeEvent(tool, args = {}) {
         } (${short(args.d_ou, 60)})`,
         needsOk: false,
       };
+    case 'proposer_indicateur':
+      return { line: `🔴 Indicateur à valider : ${short(args.nom, 100)}`, needsOk: true };
+    case 'ecrire_bilan':
+      return { line: `📈 Bilan ${args.periode_type} ${args.periode} écrit`, needsOk: false };
     case 'enregistrer_facture':
       return { line: `🧾 Facture traitée (${args.etat || 'lue'})${args.fournisseur ? ' : ' + short(args.fournisseur, 60) : ''}`, needsOk: false };
     default:
