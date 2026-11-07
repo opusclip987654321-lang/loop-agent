@@ -105,6 +105,7 @@ export function createApp({
   sessionDays = 30,
   onAgentWrite = () => {},
   onToolDone = () => {},
+  onWalidSave = () => {},
 }) {
   if (!passwordHash) throw new Error('LOOP_AGENT_PASSWORD_HASH manquant : lance « npm run hash-password ».');
   const limiter = createLoginLimiter();
@@ -242,6 +243,7 @@ export function createApp({
         }
         if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed))
           throw new HttpError(400, 'Le document doit être un objet JSON.');
+        const previous = db.getDoc(key);
         const r = db.putDoc(key, body.value, body.base, 'walid');
         if (!r.ok)
           return send(res, 409, {
@@ -249,6 +251,11 @@ export function createApp({
             value: r.current ? r.current.value : null,
             version: r.current ? r.current.version : 0,
           });
+        try {
+          onWalidSave(key, previous ? previous.value : null, body.value);
+        } catch (e) {
+          console.error('relance des agents :', String(e.message || e));
+        }
         return send(res, 200, { version: r.version });
       }
       throw new HttpError(405, 'Méthode non permise.');

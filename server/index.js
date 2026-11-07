@@ -4,6 +4,7 @@ import { createApp } from './app.js';
 import { createNotifier } from './telegram.js';
 import { scheduleBackups } from './backup.js';
 import { PROJECTS } from './projects.js';
+import { createRoutineRelay, loadRoutines } from './routines.js';
 
 const config = {
   port: Number(process.env.PORT || 3000),
@@ -37,6 +38,23 @@ const notifier = createNotifier({
 const stopTelegram = notifier.start();
 console.log(notifier.enabled ? 'Récap Telegram : actif.' : 'Récap Telegram : inactif (TELEGRAM_BOT_TOKEN / TELEGRAM_CHAT_ID absents).');
 
+const labelFor = (agent) => {
+  const id = agent.replace(/^(agent|project):/, '');
+  if (id === 'factures') return 'Factures';
+  return PROJECTS.find((p) => p.id === id)?.name || id;
+};
+const relay = createRoutineRelay({
+  dataDir: config.dataDir,
+  cooldownMs: Number(process.env.ROUTINE_COOLDOWN_MINUTES || 30) * 60 * 1000,
+  labelFor,
+  notify: (text) => (notifier.enabled ? notifier.send(text) : Promise.resolve()),
+});
+const stopRelay = relay.start();
+{
+  const n = Object.keys(loadRoutines(config.dataDir)).length;
+  console.log(n ? `Relance des agents : ${n} projet(s) branché(s).` : 'Relance des agents : aucun projet branché (npm run routine-jeton).');
+}
+
 const stopBackups = scheduleBackups({
   db,
   dataDir: config.dataDir,
@@ -45,7 +63,7 @@ const stopBackups = scheduleBackups({
 });
 
 const server = createServer(
-  createApp({ db, ...config, onToolDone: (agent, tool, args) => notifier.note(agent, tool, args) })
+  createApp({ db, ...config, onToolDone: (agent, tool, args) => notifier.note(agent, tool, args), onWalidSave: relay.onWalidSave })
 );
 server.requestTimeout = 60_000;
 server.listen(config.port, config.host, () => {
@@ -54,6 +72,7 @@ server.listen(config.port, config.host, () => {
 
 function shutdown() {
   stopTelegram();
+  stopRelay();
   stopBackups();
   server.close(() => {
     db.close();

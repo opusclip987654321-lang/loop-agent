@@ -11,6 +11,7 @@
     "start": "node server/index.js",
     "dev": "node --env-file-if-exists=.env server/index.js",
     "test": "node --test \"test/**/*.test.js\"",
-    "hash-password": "node scripts/hash-password.js"
+    "hash-password": "node scripts/hash-password.js",
+    "routine-jeton": "node scripts/routine-jeton.js"
   }
 }

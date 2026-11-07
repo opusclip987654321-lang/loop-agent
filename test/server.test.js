@@ -10,11 +10,12 @@ import { hashPassword, verifyPassword, tokenHash } from '../server/auth.js';
 
 const PASSWORD = 'mot-de-passe-de-test-123';
 let server, base, dataDir, db;
+const saves = [];
 
 before(async () => {
   dataDir = mkdtempSync(join(tmpdir(), 'loop-agent-test-'));
   db = openDb(dataDir);
-  server = createServer(createApp({ db, dataDir, passwordHash: hashPassword(PASSWORD) }));
+  server = createServer(createApp({ db, dataDir, passwordHash: hashPassword(PASSWORD), onWalidSave: (...a) => saves.push(a) }));
   await new Promise((r) => server.listen(0, '127.0.0.1', r));
   base = `http://127.0.0.1:${server.address().port}`;
 });
@@ -427,4 +428,20 @@ test('connecteur : lecture d’une facture déposée', async () => {
   const after = JSON.parse(db.getDoc('money').value);
   assert.equal(after.invoices[0].state, 'lue');
   assert.equal(after.expenses[0].invoice.date, '2026-11-01');
+});
+
+test('un enregistrement de Walid transmet l’ancienne et la nouvelle version (relance des agents)', async () => {
+  const { cookie } = await login();
+  const key = 'project:leviaro';
+  const start = saves.length;
+  const v1 = JSON.stringify({ tasks: [{ id: 't1', proposalStatus: 'pending' }] });
+  const v2 = JSON.stringify({ tasks: [{ id: 't1', proposalStatus: 'approved' }] });
+  const cur = await (await fetch(base + '/api/docs/' + encodeURIComponent(key), { headers: { Cookie: cookie } })).json();
+  const r1 = await put(cookie, key, v1, cur.version);
+  const { version } = await r1.json();
+  await put(cookie, key, v2, version);
+  const mine = saves.slice(start).filter((s) => s[0] === key);
+  assert.equal(mine.length, 2);
+    assert.equal(mine[1][1], v1);
+  assert.equal(mine[1][2], v2);
 });

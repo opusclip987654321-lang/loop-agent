@@ -63,6 +63,16 @@ cd /opt/loop-agent && git pull && docker compose up -d --build
 Si la nouvelle version ne démarre pas (`docker compose ps` n'affiche pas « healthy ») :
 `git checkout <version précédente> && docker compose up -d --build`.
 
+## Relancer les agents après une décision
+
+Pour un projet dont l'agent tourne en routine (claude.ai/code/routines) : ouvrir la routine, **Add another trigger → API → Generate token**, garder la page ouverte, puis sur le serveur :
+
+```sh
+ssh -t loop-agent-vps 'docker exec -it loop-agent node scripts/routine-jeton.js ranger <projet>'
+```
+
+Le script demande l'adresse puis le jeton (masqué). Ils sont rangés dans `/data/routines.json` (droits 600), jamais dans le code. `liste` montre les projets branchés, `retirer <projet>` en débranche un. Pas besoin de redémarrer. Garde-fou : une relance par projet toutes les 30 minutes au plus (`ROUTINE_COOLDOWN_MINUTES`).
+
 ## Données
 
 Volume Docker `loop-agent_loop_agent_data` : `loop-agent.sqlite` (tout) et `files/` (factures).
