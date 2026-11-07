@@ -33,6 +33,13 @@ export function describeEvent(tool, args = {}) {
       return args.branche === true
         ? { line: `🟢 Accès branché : ${short(args.outil, 80)}`, needsOk: false }
         : { line: `🔴 Accès à brancher : ${short(args.outil, 80)}`, needsOk: true };
+    case 'enregistrer_resultat':
+      return {
+        line: `📊 ${args.action} : ${
+          args.indisponible === true ? 'donnée indisponible' : args.valeur !== undefined ? 'résultat ' + args.valeur : args.fait !== undefined ? (args.fait ? 'fait' : 'pas fait') : '+' + args.volume
+        } (${short(args.d_ou, 60)})`,
+        needsOk: false,
+      };
     case 'enregistrer_facture':
       return { line: `🧾 Facture traitée (${args.etat || 'lue'})${args.fournisseur ? ' : ' + short(args.fournisseur, 60) : ''}`, needsOk: false };
     default:

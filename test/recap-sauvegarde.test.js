@@ -41,7 +41,7 @@ test('récap : un seul message par agent, envoyé après le silence, puis vidé'
     const action = (await s.tools.lire_projet.handler({ projet: 'cambodge' })).actions[0].id;
     await s.tools.ecrire_tour.handler({ projet: 'cambodge', action, constat: '15 offres lues', decision: 'continuer' });
     await s.tools.proposer_action.handler({
-      projet: 'cambodge', titre: 'Filtrer le télétravail', objectif: 'x', type: 'Boucle', critere: 'y', brief: BRIEF,
+      projet: 'cambodge', titre: 'Filtrer le télétravail', objectif: 'x', type: 'Boucle', critere: 'y', objectif_type: 'fait_pas_fait', brief: BRIEF,
     });
     await s.tools.lister_projets.handler({}); // lecture : pas de ligne
 
@@ -126,7 +126,7 @@ test('action refusée : ne tourne pas, raison lue par l’agent, « remplace » 
   const s = setup();
   try {
     const r = await s.tools.proposer_action.handler({
-      projet: 'leviaro', titre: 'MP massifs', objectif: 'x', type: 'Boucle', critere: 'y', brief: BRIEF,
+      projet: 'leviaro', titre: 'MP massifs', objectif: 'x', type: 'Boucle', critere: 'y', objectif_type: 'fait_pas_fait', brief: BRIEF,
     });
     // Walid refuse avec une raison (écrit par l'interface)
     const cur = s.db.getDoc('project:leviaro');
@@ -143,7 +143,7 @@ test('action refusée : ne tourne pas, raison lue par l’agent, « remplace » 
       /refusé/
     );
     const r2 = await s.tools.proposer_action.handler({
-      projet: 'leviaro', titre: 'MP sur 10 contacts', objectif: 'x', type: 'Ponctuelle', critere: 'y', brief: BRIEF, remplace: r.action,
+      projet: 'leviaro', titre: 'MP sur 10 contacts', objectif: 'x', type: 'Ponctuelle', critere: 'y', objectif_type: 'fait_pas_fait', brief: BRIEF, remplace: r.action,
     });
     const lu2 = (await s.tools.lire_projet.handler({ projet: 'leviaro' })).actions.find((a) => a.id === r.action);
     assert.equal(lu2.proposition.remplacee_par, r2.action);

@@ -209,7 +209,7 @@ test('connecteur : initialize et liste des outils', async () => {
   assert.equal(init.json.result.serverInfo.name, 'loop-agent');
   assert.match(init.json.result.instructions, /ne commande JAMAIS rien/);
   const tools = (await mcp('tools/list', {})).json.result.tools.map((t) => t.name);
-  for (const n of ['lister_projets', 'lire_projet', 'ecrire_tour', 'proposer_action', 'proposer_modification', 'proposer_idee', 'noter_lecon', 'changer_statut_lecon', 'signaler_acces', 'factures_a_lire', 'lire_facture', 'enregistrer_facture'])
+  for (const n of ['lister_projets', 'lire_projet', 'ecrire_tour', 'proposer_action', 'proposer_modification', 'proposer_idee', 'noter_lecon', 'changer_statut_lecon', 'signaler_acces', 'factures_a_lire', 'lire_facture', 'enregistrer_facture', 'enregistrer_resultat'])
     assert.ok(tools.includes(n), n);
 });
 
@@ -228,6 +228,8 @@ test('connecteur : un tour complet sur un projet jamais ouvert', async () => {
     objectif: 'Trouver plus d’adresses',
     type: 'Boucle',
     critere: 'Fiches avec adresse',
+    objectif_type: 'a_observer',
+    seuil: { type: 'volume', valeur: 200, unite: 'fiches préparées' },
     idees: ['Lister les éditeurs', 'Tester 20 fiches'],
     brief: BRIEF,
   });
@@ -244,6 +246,8 @@ test('connecteur : un tour complet sur un projet jamais ouvert', async () => {
   const t = doc.tasks.find((x) => x.id === newId);
   assert.equal(t.proposalStatus, 'pending');
   assert.equal(t.brief.ifNothing, BRIEF.si_rien);
+  assert.deepEqual(t.objective.threshold, { type: 'volume', value: 200, unit: 'fiches préparées' });
+  assert.equal(t.objective.setBy, 'agent');
   assert.ok(doc.priorities.includes(newId));
 
   // Tour sur une boucle permanente + idée qui avance.
@@ -285,6 +289,57 @@ test('connecteur : un tour complet sur un projet jamais ouvert', async () => {
   const list = (await call('lister_projets', {})).out;
   assert.equal(list.find((p) => p.projet === 'impacteur-mail').couleur, 'rouge');
   assert.equal(list.find((p) => p.projet === 'extrait-politique').couleur, 'gris');
+});
+
+test('connecteur : objectif et résultats mesurés', async () => {
+  // Sans type d'objectif : refusé.
+  let r = await call('proposer_action', { projet: 'leviaro', titre: 'X', objectif: 'Y', type: 'Boucle', critere: 'Z', brief: BRIEF });
+  assert.equal(r.isError, true);
+  assert.match(r.out, /objectif_type/);
+  // « À observer » sans seuil : refusé.
+  r = await call('proposer_action', { projet: 'leviaro', titre: 'X', objectif: 'Y', type: 'Boucle', critere: 'Z', objectif_type: 'a_observer', brief: BRIEF });
+  assert.equal(r.isError, true);
+
+  // Objectif chiffré sur une boucle permanente déjà validée (posé par Walid).
+  const doc = JSON.parse(db.getDoc('project:impacteur-mail').value);
+  const v = db.getDoc('project:impacteur-mail').version;
+  const t = doc.tasks.find((x) => x.id === 'impacteur-mail-stats');
+  t.objective = { kind: 'chiffre', target: 40, unit: '% d’ouverture', direction: 'augmenter', setBy: 'walid' };
+  assert.ok(db.putDoc('project:impacteur-mail', JSON.stringify(doc), v, 'walid').ok);
+
+  // Résultat sans valeur ni « indisponible » : refusé (jamais 0 par défaut).
+  r = await call('enregistrer_resultat', { projet: 'impacteur-mail', action: 'impacteur-mail-stats', d_ou: 'n8n' });
+  assert.equal(r.isError, true);
+  assert.match(r.out, /jamais 0/);
+
+  r = await call('enregistrer_resultat', { projet: 'impacteur-mail', action: 'impacteur-mail-stats', valeur: 37, periode: 'semaine du 03/11', d_ou: 'n8n, 52 envois' });
+  assert.equal(r.isError, false);
+  assert.equal(r.out.avancement.ecart, 'il manque 3');
+  r = await call('enregistrer_resultat', { projet: 'impacteur-mail', action: 'impacteur-mail-stats', indisponible: true, d_ou: 'n8n hors ligne' });
+  assert.equal(r.isError, false);
+
+  r = await call('lire_projet', { projet: 'impacteur-mail' });
+  const a = r.out.actions.find((x) => x.id === 'impacteur-mail-stats');
+  assert.equal(a.objectif_fixe.fixe_par, 'Walid');
+  assert.equal(a.objectif_fixe.dernier_resultat, 37, 'une donnée indisponible ne remplace pas la dernière vraie mesure');
+  assert.equal(a.resultats[0].valeur, 'indisponible');
+  assert.equal(a.resultats[1].source, 'relevée par l’agent');
+
+  // Seuil en volume : cumul, puis consigne de juger.
+  r = await call('proposer_action', {
+    projet: 'leviaro', titre: 'Secteur formation', objectif: 'Trouver des clients', type: 'Boucle', critere: 'Réponses',
+    objectif_type: 'a_observer', seuil: { type: 'volume', valeur: 200, unite: 'mails envoyés' }, brief: BRIEF,
+  });
+  const id = r.out.action;
+  const d2 = JSON.parse(db.getDoc('project:leviaro').value);
+  const v2 = db.getDoc('project:leviaro').version;
+  d2.tasks.find((x) => x.id === id).proposalStatus = 'approved';
+  assert.ok(db.putDoc('project:leviaro', JSON.stringify(d2), v2, 'walid').ok);
+  await call('enregistrer_resultat', { projet: 'leviaro', action: id, volume: 120, d_ou: 'Gmail envoyés' });
+  r = await call('enregistrer_resultat', { projet: 'leviaro', action: id, volume: 90, d_ou: 'Gmail envoyés' });
+  assert.equal(r.out.avancement.volume_cumule, 210);
+  assert.equal(r.out.avancement.seuil_atteint, true);
+  assert.match(r.out.avancement.consigne, /juge maintenant/);
 });
 
 test('connecteur : lecture d’une facture déposée', async () => {

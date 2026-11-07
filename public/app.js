@@ -2,7 +2,7 @@
 const pages = ['Planification', 'Exécution', 'Vérification', 'Mémoire', 'Priorités', 'Révision'],
   slugs = ['planification', 'execution', 'verification', 'memoire', 'priorites', 'revision'];
 const moneyPage = { name: 'Argent', slug: 'argent' },
-  categories = ['Site web', 'Application mobile', 'Réseaux sociaux', 'SEO', 'Design', 'Autre'],
+  categories = ['Site web', 'Application mobile', 'Réseaux sociaux', 'SEO', 'Design', 'Prospection', 'Autre'],
   formats = ['Short', 'Vidéo longue', 'Publication Communauté'];
 const socialNetworks = [
   { id: 'instagram', platform: 'Instagram', target: 1000, current: 0, monthlyViews: 0, followersGained: 0 },
