@@ -115,3 +115,23 @@ test('jeton refusé (401) : prévient Walid une fois, ne réessaie pas en boucle
   assert.equal(fetchImpl.calls.length, 1);
   assert.match(notes[0], /impossible de relancer/);
 });
+
+test('projet sans routine : un seul rappel Telegram groupé, après 3 minutes sans nouvelle décision', async () => {
+  let clock = 0;
+  const fetchImpl = fakeFetch();
+  const notes = [];
+  const r = createRoutineRelay({ routines: ROUTINES, fetchImpl, now: () => clock, notify: async (t) => notes.push(t), labelFor: () => 'Impacteur Communauté', log: { log() {}, error() {} } });
+  r.onWalidSave('project:impacteur-communaute', ...approve);
+  clock += 60 * 1000;
+  r.onWalidSave('project:impacteur-communaute', ...approve2);
+  await r.tick();
+  assert.equal(notes.length, 0); // Walid est encore en train de décider
+  clock += 3 * 60 * 1000;
+  await r.tick();
+  await r.tick();
+  assert.equal(notes.length, 1);
+  assert.match(notes[0], /Impacteur Communauté/);
+  assert.match(notes[0], /proposition « Mail » : validée/);
+  assert.match(notes[0], /premier résultat de « Veille »/);
+  assert.equal(fetchImpl.calls.length, 0); // aucune routine lancée
+});

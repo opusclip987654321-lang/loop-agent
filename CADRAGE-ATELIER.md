@@ -93,6 +93,8 @@ L'action arrêtée reste visible, avec un bandeau expliquant pourquoi et deux bo
 
 Quand Walid valide, refuse ou répond (proposition, modification, premier résultat, idée, indicateur, action ajoutée, reprise après pause), Loop Agent **relance la routine Claude du projet** par son déclencheur « API », avec la liste des décisions. **Au plus une fois toutes les 30 minutes par projet** ; une décision prise pendant ce délai part à la fin du délai. Seuls les projets dont l'agent tourne en routine, et dont le jeton a été rangé sur le serveur, sont relancés. Le tour consomme l'abonnement Claude, pas l'API. Un message Telegram signale chaque relance, ou l'échec d'une relance. **[Décidé le 7 nov. 2026]**
 
+Pour un projet **sans routine** (agent en conversation sur le Mac : Impacteur Communauté, Ebook…), Loop Agent envoie à la place **un rappel Telegram groupé** (« écris à son agent pour qu'il reparte »), 3 minutes après la dernière décision prise sur ce projet. **[Décidé le 7 nov. 2026]**
+
 ---
 
 ## 6. Les couleurs

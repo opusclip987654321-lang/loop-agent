@@ -94,15 +94,24 @@ export function createRoutineRelay({
   notify = async () => {},
   labelFor = (p) => p,
   log = console,
+  reminderQuietMs = 3 * 60 * 1000,
   routines = null,
 }) {
   const getRoutines = () => routines || loadRoutines(dataDir, log);
   const lastFire = new Map(); // projet → horodatage du dernier lancement
   const pending = new Map(); // projet → décisions en attente de lancement
   const blockedUntil = new Map(); // projet → fin d'un refus 429
+  // Projets sans routine (agent en conversation sur le Mac) : un rappel Telegram groupé,
+  // envoyé quand Walid n’a plus rien décidé sur ce projet depuis `reminderQuietMs`.
+  const reminders = new Map(); // projet → { decisions, at }
 
   function noteDecisions(project, decisions) {
-    if (!decisions.length || !getRoutines()[project]) return false;
+    if (!decisions.length) return false;
+    if (!getRoutines()[project]) {
+      const r = reminders.get(project) || { decisions: [] };
+      reminders.set(project, { decisions: [...r.decisions, ...decisions], at: now() });
+      return false;
+    }
     pending.set(project, [...(pending.get(project) || []), ...decisions]);
     return true;
   }
@@ -145,6 +154,12 @@ export function createRoutineRelay({
   }
   async function run() {
     {
+      for (const [project, r] of [...reminders]) {
+        if (now() - r.at < reminderQuietMs) continue;
+        reminders.delete(project);
+        const list = r.decisions.slice(0, 8).map((d) => "- " + d).join("\n") + (r.decisions.length > 8 ? `\n… et ${r.decisions.length - 8} autre(s)` : "");
+        await notify(`🔔 ${labelFor(project)} : tu as décidé dans Loop Agent, mais son agent ne peut pas être relancé automatiquement (il tourne en conversation). Écris-lui pour qu’il reparte.\n${list}`).catch(() => {});
+      }
       for (const [project, decisions] of [...pending]) {
         const t = now();
         if (t < (blockedUntil.get(project) || 0)) continue;
@@ -183,5 +198,5 @@ export function createRoutineRelay({
     return () => clearInterval(t);
   }
 
-  return { onWalidSave, tick, start, pending, lastFire, decisionsBetween };
+  return { onWalidSave, tick, start, pending, reminders, lastFire, decisionsBetween };
 }
