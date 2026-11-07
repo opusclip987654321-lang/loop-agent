@@ -952,3 +952,17 @@ td input {
 .mrow a {
   color: var(--text);
 }
+
+.reply-status {
+  margin: 8px 0 0;
+  font-size: 0.9em;
+  color: var(--muted);
+}
+.reply-status .ok {
+  color: #6fcf8f;
+  font-weight: 600;
+}
+button.saved {
+  border-color: #6fcf8f;
+  color: #6fcf8f;
+}

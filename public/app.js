@@ -278,7 +278,7 @@ function notify(s) {
   t.textContent = s;
   t.hidden = false;
   clearTimeout(window.tt);
-  window.tt = setTimeout(() => (t.hidden = true), 3200);
+  window.tt = setTimeout(() => (t.hidden = true), 5000);
 }
 function pill(s) {
   let c = /Programmé|Approuvé|Validé|Terminé|Top performance|Hook efficace/.test(s)
@@ -461,7 +461,7 @@ function taskIdeaCards(t, showTools = false) {
                     ? `<p class="note">Idée de Walid · déjà validée</p>`
                     : '';
           let red = (isAI && approval === 'pending') || (access && access.some((a) => !a.connected));
-          return `<article class="card idea-card ${red ? 'cred' : ''}"><div class="idea-line"><div class="idea-copy"><div class="toolbar" style="margin:0 0 8px">${red ? colorDot('rouge') : colorDot('vert')}<span class="badge ${isAI ? 'blue' : 'gold'}">${isAI ? 'Proposée par l’IA' : idea.source === 'Walid' ? 'Ajoutée par Walid' : 'Idée'}</span>${isAI ? pill(approval === 'pending' ? 'À valider par Walid' : approval === 'approved' ? 'Validée par Walid' : 'Refusée') : ''}</div><strong>${esc(text)}</strong>${decision}<div class="toolbar" style="margin:10px 0"><span class="badge gold">Dernier stade atteint : ${esc(stage)}</span></div>${history.length ? `<p class="note">Parcours : ${history.map((x) => esc(x.stage)).join(' → ')}</p>` : ''}<section class="card space" style="margin-top:14px"><label>Commentaire de l’agent</label><p>${agentComment ? esc(agentComment) : '<span class="note">Aucun commentaire transmis pour le moment.</span>'}</p><label for="idea-reply-${t.id}-${i}">Ta réponse à l’agent</label><textarea id="idea-reply-${t.id}-${i}" placeholder="Écris ta réponse ou les informations qui lui manquent…">${esc(reply)}</textarea><div class="actions"><button class="small" onclick="saveTaskIdeaReply('${t.id}',${i})">Enregistrer ma réponse</button></div></section></div><div class="idea-side">${connectionPanel(t, access)}<div class="idea-rank"><button class="small" aria-label="Augmenter la priorité de cette idée" ${i === 0 ? 'disabled' : ''} onclick="moveTaskIdea('${t.id}',${i},-1,${showTools})">↑ Priorité</button><button class="small" aria-label="Baisser la priorité de cette idée" ${i === t.ideas.length - 1 ? 'disabled' : ''} onclick="moveTaskIdea('${t.id}',${i},1,${showTools})">↓ Priorité</button></div></div></div>${
+          return `<article class="card idea-card ${red ? 'cred' : ''}"><div class="idea-line"><div class="idea-copy"><div class="toolbar" style="margin:0 0 8px">${red ? colorDot('rouge') : colorDot('vert')}<span class="badge ${isAI ? 'blue' : 'gold'}">${isAI ? 'Proposée par l’IA' : idea.source === 'Walid' ? 'Ajoutée par Walid' : 'Idée'}</span>${isAI ? pill(approval === 'pending' ? 'À valider par Walid' : approval === 'approved' ? 'Validée par Walid' : 'Refusée') : ''}</div><strong>${esc(text)}</strong>${decision}<div class="toolbar" style="margin:10px 0"><span class="badge gold">Dernier stade atteint : ${esc(stage)}</span></div>${history.length ? `<p class="note">Parcours : ${history.map((x) => esc(x.stage)).join(' → ')}</p>` : ''}<section class="card space" style="margin-top:14px"><label>Commentaire de l’agent</label><p>${agentComment ? esc(agentComment) : '<span class="note">Aucun commentaire transmis pour le moment.</span>'}</p><label for="idea-reply-${t.id}-${i}">Ta réponse à l’agent</label><textarea id="idea-reply-${t.id}-${i}" placeholder="Écris ta réponse ou les informations qui lui manquent…">${esc(reply)}</textarea><div class="actions"><button class="small" id="idea-reply-btn-${t.id}-${i}" onclick="saveTaskIdeaReply('${t.id}',${i})">Enregistrer ma réponse</button></div><p class="reply-status" id="idea-reply-status-${t.id}-${i}">${replyStatus(t, idea)}</p></section></div><div class="idea-side">${connectionPanel(t, access)}<div class="idea-rank"><button class="small" aria-label="Augmenter la priorité de cette idée" ${i === 0 ? 'disabled' : ''} onclick="moveTaskIdea('${t.id}',${i},-1,${showTools})">↑ Priorité</button><button class="small" aria-label="Baisser la priorité de cette idée" ${i === t.ideas.length - 1 ? 'disabled' : ''} onclick="moveTaskIdea('${t.id}',${i},1,${showTools})">↓ Priorité</button></div></div></div>${
             showTools
               ? `<div class="tiny" style="margin:12px 0 5px">Outils envisagés pour cette idée</div><div class="toolbar" style="margin:0">${toolsForIdea(
                   t,
@@ -548,8 +548,30 @@ function saveTaskIdeaReply(id, index) {
       walidReply: '',
     };
   idea.walidReply = el.value;
+  idea.walidReplyAt = el.value.trim() ? new Date().toISOString() : undefined;
   save();
-  notify('Ta réponse à cette idée est enregistrée.');
+  let st = document.getElementById('idea-reply-status-' + id + '-' + index),
+    btn = document.getElementById('idea-reply-btn-' + id + '-' + index);
+  if (st) st.innerHTML = replyStatus(t, idea);
+  if (btn) {
+    btn.textContent = '✓ Enregistrée';
+    btn.classList.add('saved');
+    clearTimeout(btn._t);
+    btn._t = setTimeout(() => {
+      btn.textContent = 'Enregistrer ma réponse';
+      btn.classList.remove('saved');
+    }, 2500);
+  }
+  notify(el.value.trim() ? 'Réponse enregistrée : l’agent la lira à son prochain tour.' : 'Réponse effacée.');
+}
+// Ligne d'état sous la réponse de Walid : enregistrée, puis lue par l'agent.
+function replyStatus(t, idea) {
+  if (!idea || typeof idea === 'string' || !(idea.walidReply || '').trim() || !idea.walidReplyAt) return '';
+  let at = new Date(idea.walidReplyAt),
+    when = (d) => d.toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit' }) + ' à ' + d.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
+  if (t && t.lastAgentTurn && new Date(t.lastAgentTurn) > at)
+    return `<span class="ok">✓✓ Lue par l’agent</span> · tour du ${when(new Date(t.lastAgentTurn))}`;
+  return `<span class="ok">✓ Envoyée à l’agent</span> le ${when(at)} · il la lira à son prochain tour`;
 }
 function moveTaskIdea(id, index, direction, showTools) {
   let t = task(id),

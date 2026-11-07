@@ -197,6 +197,7 @@ export function createAgentTools({ db, dataDir, onAgentWrite = () => {}, onToolD
               validation: i.approvalStatus,
               commentaire_agent: i.agentComment || undefined,
               reponse_walid: i.walidReply || undefined,
+              reponse_walid_le: (i.walidReply && i.walidReplyAt) || undefined,
               acces_manquants: (i.accessRequests || []).filter((a) => !a.connected).map((a) => a.name),
             })),
             derniers_tours: (t.reviewHistory || []).slice(0, 3),
