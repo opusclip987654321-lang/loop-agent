@@ -121,3 +121,33 @@ test('sauvegarde : base lisible, factures copiées, 14 gardées', () => {
     rmSync(dataDir, { recursive: true, force: true });
   }
 });
+
+test('action refusée : ne tourne pas, raison lue par l’agent, « remplace » la retire', async () => {
+  const s = setup();
+  try {
+    const r = await s.tools.proposer_action.handler({
+      projet: 'leviaro', titre: 'MP massifs', objectif: 'x', type: 'Boucle', critere: 'y', brief: BRIEF,
+    });
+    // Walid refuse avec une raison (écrit par l'interface)
+    const cur = s.db.getDoc('project:leviaro');
+    const doc = JSON.parse(cur.value);
+    const t = doc.tasks.find((x) => x.id === r.action);
+    Object.assign(t, { proposalStatus: 'rejected', rejectReason: 'trop risqué', decidedAt: new Date().toISOString() });
+    s.db.putDoc('project:leviaro', JSON.stringify(doc), cur.version, 'walid');
+
+    const lu = (await s.tools.lire_projet.handler({ projet: 'leviaro' })).actions.find((a) => a.id === r.action);
+    assert.equal(lu.proposition.statut, 'rejected');
+    assert.equal(lu.proposition.raison_du_refus, 'trop risqué');
+    await assert.rejects(
+      () => s.tools.ecrire_tour.handler({ projet: 'leviaro', action: r.action, constat: 'c', decision: 'd' }),
+      /refusé/
+    );
+    const r2 = await s.tools.proposer_action.handler({
+      projet: 'leviaro', titre: 'MP sur 10 contacts', objectif: 'x', type: 'Ponctuelle', critere: 'y', brief: BRIEF, remplace: r.action,
+    });
+    const lu2 = (await s.tools.lire_projet.handler({ projet: 'leviaro' })).actions.find((a) => a.id === r.action);
+    assert.equal(lu2.proposition.remplacee_par, r2.action);
+  } finally {
+    s.done();
+  }
+});

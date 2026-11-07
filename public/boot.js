@@ -218,6 +218,7 @@
       window.LA = createStore(await r.json());
       await loadScript('/app.js');
       await loadScript('/glue.js');
+      await loadScript('/historique.js');
       setStatus('Enregistré', 'green');
     } catch (e) {
       const main = document.getElementById('main');

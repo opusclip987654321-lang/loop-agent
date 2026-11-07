@@ -633,7 +633,7 @@ function execution() {
   return (
     head('Exécution', 'Suivre les tâches, leurs outils, les validations et les résultats du projet.') +
     `<h2>Tâches d’exécution</h2><div class="grid">${data.tasks
-      .filter((t) => t.proposalStatus !== 'pending')
+      .filter((t) => t.proposalStatus !== 'pending' && t.proposalStatus !== 'rejected')
       .map(executionCard)
       .join('')}</div><p class="note">La pause et les états sont propres à chaque tâche.</p>`
   );
@@ -839,7 +839,7 @@ function verification() {
     head('Vérification', 'Comparer les résultats aux objectifs de ' + projectDef.name + '.') +
     followersBoard +
     `${projectDef.kind === 'youtube' ? `<div class="strip"><p class="note">CTR, rétention à 30 secondes et durée moyenne de visionnage (AVD) sont affichés pour les contenus vidéo.</p></div>` : ''}<h2>Résultats par tâche</h2><div class="grid">${data.tasks
-      .filter((t) => t.proposalStatus !== 'pending')
+      .filter((t) => t.proposalStatus !== 'pending' && t.proposalStatus !== 'rejected')
       .map(verificationCard)
       .join('')}</div>`
   );
@@ -931,7 +931,7 @@ function memoryCards() {
   let q = (window.query || '').toLowerCase();
   return (
     data.tasks
-      .filter((t) => t.proposalStatus !== 'pending')
+      .filter((t) => t.proposalStatus !== 'pending' && t.proposalStatus !== 'rejected')
       .filter((t) => {
         let items = (data.memories || []).filter((m) => m.taskId === t.id);
         return !q || t.title.toLowerCase().includes(q) || items.some((m) => memoryMatches(m, q));
@@ -1174,7 +1174,7 @@ function revision() {
   return (
     head('Révision', 'Examiner le résultat de chaque action. L’agent contrôle son travail avant de te le soumettre.') +
     `<p class="note">Chaque action a son propre moment de revue : chaque semaine pour les résultats qui prennent du temps, chaque jour pour les actions dont le résultat arrive rapidement.</p><h2>Actions à réviser</h2><div class="grid">${data.tasks
-      .filter((t) => t.proposalStatus !== 'pending')
+      .filter((t) => t.proposalStatus !== 'pending' && t.proposalStatus !== 'rejected')
       .map(reviewCard)
       .join(
         '',
