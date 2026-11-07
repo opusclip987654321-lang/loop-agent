@@ -1496,3 +1496,47 @@ button.wait-outline {
 #syncStatus {
   margin-left: auto;
 }
+
+/* Couleurs plus lisibles d'un coup d'œil (retour de Walid du 7 nov.) :
+   même règle, mais l'état se voit sur toute la carte, pas seulement dans une ligne de texte. */
+:root {
+  --text-2: #d8d9dc;
+  --text-3: #b8babf;
+  --muted: #9a9da2;
+  --wait-bg: color-mix(in srgb, var(--wait) 9%, var(--panel));
+  --up-bg: color-mix(in srgb, var(--up) 7%, var(--panel));
+  --down-bg: color-mix(in srgb, var(--down) 9%, var(--panel));
+}
+.astate {
+  display: inline-block;
+  padding: 3px 10px;
+  border-radius: 999px;
+  font-size: 12.5px;
+  font-weight: 600;
+  background: var(--raised);
+}
+.astate.c-wait { background: color-mix(in srgb, var(--wait) 18%, transparent); }
+.astate.c-up { background: color-mix(in srgb, var(--up) 16%, transparent); }
+.astate.c-down { background: color-mix(in srgb, var(--down) 18%, transparent); }
+.astate.c-idle { background: var(--raised); color: var(--text-3); }
+.card.acard { border-left-width: 4px; }
+.card.acard:has(.ahead .c-wait) { border-color: color-mix(in srgb, var(--wait) 45%, var(--line)); border-left-color: var(--wait); background: var(--wait-bg); }
+.card.acard:has(.ahead .c-up) { border-left-color: var(--up); }
+.card.acard:has(.ahead .c-down) { border-color: color-mix(in srgb, var(--down) 45%, var(--line)); border-left-color: var(--down); background: var(--down-bg); }
+.card.acard:has(.ahead .c-idle) { border-left-color: var(--line-strong); }
+.strip.red,
+.strip.wait,
+.strip.banner {
+  border-color: var(--wait);
+  border-left-width: 4px;
+  background: var(--wait-bg);
+}
+.strip.banner.down {
+  border-color: var(--down);
+  background: var(--down-bg);
+}
+.nav a.active {
+  color: var(--text);
+  font-weight: 600;
+  box-shadow: inset 3px 0 0 var(--text);
+}
