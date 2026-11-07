@@ -20,6 +20,7 @@ Ce projet est suivi dans Loop Agent, identifiant de projet : <ID>.
 |---|---|
 | Email interview Impacteur (n8n, pas claude.ai) | impacteur-mail |
 | Impacteur Sponsors | impacteur-sponsors |
+| Impacteur Communauté (abonnés → Patreon) | impacteur-communaute |
 | L’Extrait politique (en pause) | extrait-politique |
 | Agent Cambodge emploi | cambodge |
 | VégéBudget | vegebudget |

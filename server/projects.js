@@ -1,4 +1,4 @@
-// Les huit projets de Loop Agent (cadrage §2).
+// Les projets de Loop Agent (cadrage §2, + Impacteur Communauté ajouté le 07/11/2026).
 // Seuls les projets qui ont une boucle entrent ici. Les données de chaque
 // projet (actions, idées, mémoire…) vivent dans la base, pas dans ce fichier.
 
@@ -16,6 +16,13 @@ export const PROJECTS = [
     type: 'Espace admin + loop quotidienne',
     kind: 'prospection',
     description: 'Trouve chaque jour des marques à démarcher pour des campagnes sur Impacteur Afrique.',
+  },
+  {
+    id: 'impacteur-communaute',
+    name: 'Impacteur Communauté',
+    type: 'Audience Instagram / TikTok → Patreon',
+    kind: 'community',
+    description: 'Transforme les abonnés Instagram et TikTok d’Impacteur en soutiens Patreon : bios et liens, image personnelle, messages aux abonnés (écrits par l’agent, envoyés par Walid), suivi des inscriptions.',
   },
   {
     id: 'extrait-politique',

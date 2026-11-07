@@ -80,7 +80,8 @@ test('connexion, état, écriture versionnée et conflit', async () => {
   assert.match(r.headers.get('set-cookie'), /SameSite=Strict/);
 
   const st = await (await fetch(base + '/api/state', { headers: { Cookie: cookie } })).json();
-  assert.equal(st.projects.length, 8);
+  assert.equal(st.projects.length, 9);
+  assert.ok(st.projects.some((p) => p.id === 'impacteur-communaute'));
   assert.deepEqual(st.docs, {});
 
   // Création (base 0), puis mise à jour (base 1).

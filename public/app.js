@@ -10,7 +10,7 @@ const socialNetworks = [
   { id: 'youtube', platform: 'YouTube', target: 1000, current: 0, monthlyViews: 0, followersGained: 0 },
   { id: 'facebook', platform: 'Facebook', target: 10000, current: 0, monthlyViews: 0, followersGained: 0 },
 ];
-// Les 8 projets viennent du serveur ; leurs données démarrent vides (cadrage : démarrage vide).
+// Les projets viennent du serveur ; leurs données démarrent vides (cadrage : démarrage vide).
 const projects = LA.projects.map((p) => ({ ...p, tasks: [], ideas: [], memories: [] }));
 function executionPlan(owner) {
   return owner === 'Agent'
