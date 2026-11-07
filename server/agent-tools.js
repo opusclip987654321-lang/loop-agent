@@ -275,6 +275,7 @@ export function createAgentTools({ db, dataDir, onAgentWrite = () => {}, onToolD
           if (args.terminee === true) {
             if (t.type !== 'Ponctuelle') throw new ToolError('Seule une action ponctuelle peut être terminée ; une boucle ne se termine jamais.');
             t.done = true;
+            t.doneAt = nowIso();
             t.status = 'Terminée';
           }
           for (const u of args.idees || []) {

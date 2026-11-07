@@ -7,9 +7,10 @@
 // - Refusée sans raison ni réponse : elle quitte le tableau 2 jours après le refus.
 // - Refusée avec raison ou réponse : elle reste jusqu'à ce que l'agent propose une
 //   action corrigée (champ « remplace »), et au plus 7 jours.
-// - Historique : toutes les actions validées ou refusées, avec « Garder » ou
-//   « Lu, retirer ». Retirer une action validée ne l'arrête pas : seule sa ligne
-//   d'historique disparaît. Retirer une action refusée la supprime.
+// - Historique : seulement ce qui est fini — actions refusées et actions
+//   ponctuelles terminées (une boucle ne se termine jamais : elle reste au
+//   tableau). « Garder » ou « Lu, retirer » : retirer une action terminée
+//   n'efface que sa ligne d'historique ; retirer une action refusée la supprime.
 'use strict';
 
 const HISTORY_SLUG = 'historique';
@@ -109,39 +110,40 @@ proposalCard = function (t) {
 // ---------- Onglet Historique ----------
 function historyItems() {
   return (data.tasks || [])
-    .filter((t) => (t.proposalStatus === 'approved' || t.proposalStatus === 'rejected') && !t.historyHidden)
+    .filter((t) => (t.proposalStatus === 'rejected' || t.done) && !t.historyHidden)
     .filter(
       (t) =>
         historyFilter === 'Toutes' ||
-        (historyFilter === 'Validées' && t.proposalStatus === 'approved') ||
+        (historyFilter === 'Terminées' && t.done && t.proposalStatus !== 'rejected') ||
         (historyFilter === 'Refusées' && t.proposalStatus === 'rejected') ||
         (historyFilter === 'Gardées' && t.historyKept),
     )
-    .sort((a, b) => String(b.decidedAt || b.proposedAt || '').localeCompare(String(a.decidedAt || a.proposedAt || '')));
+    .sort((a, b) => String(endDate(b) || '').localeCompare(String(endDate(a) || '')));
+}
+function endDate(t) {
+  return t.proposalStatus === 'rejected' ? t.rejectedAt || t.decidedAt : t.doneAt || t.lastAgentTurn || t.decidedAt || t.proposedAt;
 }
 function historyCard(t) {
-  const ok = t.proposalStatus === 'approved';
-  const where = ok ? 'Au tableau' : leftBoard(t) ? 'Retirée du tableau' : 'Encore au tableau';
+  const ok = t.proposalStatus !== 'rejected';
+  const where = ok ? 'Terminée' : leftBoard(t) ? 'Retirée du tableau' : 'Encore au tableau';
   return `<article class="card ${ok ? 'cgreen' : 'cred'}"><div class="toolbar" style="margin:0 0 8px">${pill(
-    ok ? 'Validée' : 'Refusée',
+    ok ? 'Terminée' : 'Refusée',
   )}<span class="badge">${t.type === 'Boucle' ? '🔁 Boucle' : '● Ponctuelle'}</span><span class="badge gold">${esc(where)}</span>${
     t.historyKept ? '<span class="badge gold">📌 Gardée</span>' : ''
-  }</div><h3>${esc(t.title)}</h3><p class="muted">${esc(t.goal || '')}</p><p class="note">Proposée le ${esc(
-    frDate(t.proposedAt),
-  )} · ${ok ? 'validée' : 'refusée'} le ${esc(frDate(t.decidedAt || t.rejectedAt))}</p>${
+  }</div><h3>${esc(t.title)}</h3><p class="muted">${esc(t.goal || '')}</p><p class="note">${t.proposedAt ? `Proposée le ${esc(frDate(t.proposedAt))} · ` : ''}${ok ? 'terminée' : 'refusée'} le ${esc(frDate(endDate(t)))}</p>${
     t.rejectReason ? `<p>Raison du refus : ${esc(t.rejectReason)}</p>` : ''
   }<div class="actions">${
     t.historyKept
       ? btn('Ne plus garder', `setHistoryKept('${t.id}',false)`)
       : btn('📌 Garder dans l’historique', `setHistoryKept('${t.id}',true)`, 'good')
-  }${btn('✓ Lu, retirer', `removeFromHistory('${t.id}')`)}${ok || !leftBoard(t) ? btn('Ouvrir l’action ↗', `detail('${t.id}')`) : ''}</div></article>`;
+  }${btn('✓ Lu, retirer', `removeFromHistory('${t.id}')`)}${btn('Ouvrir l’action ↗', `detail('${t.id}')`)}</div></article>`;
 }
 function historyPage() {
   const items = historyItems();
-  const filters = ['Toutes', 'Validées', 'Refusées', 'Gardées'];
+  const filters = ['Toutes', 'Terminées', 'Refusées', 'Gardées'];
   return `<div class="heading"><div><div class="tiny" style="margin-bottom:8px">${esc(
     projectDef.name.toUpperCase(),
-  )} / HISTORIQUE</div><h1>Historique des décisions</h1><p class="intro">Les actions proposées par les agents que tu as validées ou refusées. « Garder » la conserve ici ; « Lu, retirer » l’enlève de cette liste (une action validée continue de tourner ; une action refusée est supprimée).</p></div></div><div class="toolbar">${filters
+  )} / HISTORIQUE</div><h1>Historique</h1><p class="intro">Ce qui est fini : les actions ponctuelles terminées et les actions refusées. Les boucles et les actions en cours restent sur le tableau. « Garder » la conserve ici ; « Lu, retirer » l’enlève de cette liste (une action refusée est alors supprimée).</p></div></div><div class="toolbar">${filters
     .map((f) => btn(f, `setHistoryFilter('${f}')`, historyFilter === f ? 'active' : ''))
     .join('')}</div>${
     items.length
@@ -178,7 +180,7 @@ function removeFromHistory(id) {
   t.historyHidden = true;
   save();
   render();
-  notify('Retirée de l’historique. L’action continue de tourner.');
+  notify('Retirée de l’historique.');
 }
 function confirmRemoveRejected(id) {
   data.tasks = data.tasks.filter((t) => t.id !== id);
