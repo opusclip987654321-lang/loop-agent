@@ -5,7 +5,8 @@
 // Règles :
 // - chaque projet et la page Argent sont un document versionné côté serveur ;
 // - une écriture annonce la version lue ; si quelqu'un (un agent) a écrit
-//   entre-temps, le serveur refuse (409) et on recharge sa version ;
+//   entre-temps, le serveur refuse (409) : on fusionne sa version avec celle
+//   de Walid (public/merge.js) et on renvoie, sans rien perdre ;
 // - toutes les 20 s, on regarde si un agent a écrit, et on recharge l'écran.
 (function () {
   'use strict';
@@ -40,6 +41,8 @@
   function createStore(state) {
     const cache = {};
     const versions = {};
+    // Dernière valeur connue du serveur : la base de la fusion en cas de conflit.
+    const bases = {};
     const dirty = new Set();
     const inflight = new Set();
     const timers = {};
@@ -48,6 +51,7 @@
     for (const [key, d] of Object.entries(state.docs || {})) {
       cache[key] = d.value;
       versions[key] = d.version;
+      bases[key] = d.value;
     }
 
     const store = {
@@ -122,16 +126,28 @@
         });
         const j = await r.json().catch(() => ({}));
         if (r.status === 409) {
-          // Un agent a écrit entre-temps : sa version fait foi.
-          cache[key] = j.value;
+          // Un agent a écrit entre-temps : on fusionne ses changements avec
+          // ceux de Walid, puis on renvoie sur sa version.
+          const local = cache[key] === value ? value : cache[key];
+          const merged = window.LAMerge ? window.LAMerge.mergeDocs(bases[key], local, j.value) : null;
           versions[key] = j.version;
-          dirty.delete(key);
-          inflight.delete(key);
-          notifyRemote(key, true);
+          bases[key] = j.value;
+          if (merged && merged !== j.value) {
+            cache[key] = merged;
+            dirty.add(key);
+            clearTimeout(timers[key]);
+            timers[key] = setTimeout(() => flush(key), 50);
+            notifyRemote(key, 'merged');
+          } else {
+            cache[key] = merged || j.value;
+            if (!merged) dirty.delete(key);
+            notifyRemote(key, merged ? 'merged' : true);
+          }
           return;
         }
         if (!r.ok) throw new Error(j.error || 'Erreur ' + r.status);
         versions[key] = j.version;
+        bases[key] = value;
         failing = false;
       } catch (e) {
         // Réseau coupé ou serveur indisponible : on réessaie.
@@ -167,6 +183,7 @@
           if (dirty.has(key) || inflight.has(key)) continue;
           cache[key] = d.value;
           versions[key] = d.version;
+          bases[key] = d.value;
           notifyRemote(key, false);
         }
         if (!store.pending()) setStatus('Enregistré', 'green');
@@ -216,6 +233,7 @@
       const r = await api('GET', '/api/state');
       if (!r.ok) throw new Error('Erreur ' + r.status);
       window.LA = createStore(await r.json());
+      await loadScript('/merge.js');
       await loadScript('/app.js');
       await loadScript('/glue.js');
       await loadScript('/historique.js');

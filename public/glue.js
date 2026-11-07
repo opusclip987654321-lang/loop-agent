@@ -30,7 +30,9 @@ LA.onRemoteChange = function (key, conflict) {
   else if (key === moneyKey()) moneyData = loadMoney();
   // Un autre projet : seule sa couleur dans le sélecteur peut changer.
   safeRerender();
-  if (conflict)
+  if (conflict === 'merged')
+    notify('Un agent a écrit au même moment : ses changements et les tiens sont gardés tous les deux.');
+  else if (conflict)
     notify('Un agent a modifié ces données au même moment : sa version est affichée. Refais ta dernière modification si besoin.');
 };
 
