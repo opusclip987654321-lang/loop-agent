@@ -8,6 +8,7 @@ import { verifyPassword, newSessionToken, tokenHash, createLoginLimiter } from '
 import { createMcpHandler } from './mcp.js';
 import { createAgentTools, CONNECTOR_INSTRUCTIONS } from './agent-tools.js';
 import { servir as servirMethodeNour } from './nour-methode.js';
+import { ROUTE as RELEVE_NOUR_ROUTE, jetonValide as jetonReleveValide, nettoyer as nettoyerReleve, enregistrerReleve } from './releve-nour.js';
 
 const PUBLIC_DIR = fileURLToPath(new URL('../public/', import.meta.url));
 const COOKIE = 'la_session';
@@ -317,6 +318,23 @@ export function createApp({
       if (path === '/healthz') return send(res, 200, { ok: true });
       // Méthode de la loop Nūr Meet, lue chaque matin par n8n (adresse secrète, sans connexion).
       if (req.method === 'GET' && servirMethodeNour(dataDir, path, res)) return;
+      // Relevé chiffré de la prospection Nūr Meet, envoyé chaque heure par le serveur de Nūr (jeton).
+      if (path === RELEVE_NOUR_ROUTE) {
+        if (req.method !== 'POST') throw new HttpError(405, 'POST uniquement.');
+        const ip = clientIp(req);
+        if (keyLimiter.blocked(ip)) throw new HttpError(429, 'Trop d’essais.');
+        if (!jetonReleveValide(dataDir, req.headers.authorization)) {
+          keyLimiter.fail(ip);
+          throw new HttpError(401, 'Jeton refusé.');
+        }
+        let releve;
+        try {
+          releve = nettoyerReleve(await readJson(req, 64 * 1024));
+        } catch (e) {
+          throw e instanceof HttpError ? e : new HttpError(400, String(e.message || e));
+        }
+        return send(res, 200, { ok: true, ecrits: enregistrerReleve(db, releve) });
+      }
       // Pas d'OAuth : la connexion se fait par une clé dans l'en-tête. On répond
       // clairement « rien ici » (404) aux recherches de configuration OAuth.
       if (path.startsWith('/.well-known/')) throw new HttpError(404, 'Introuvable.');

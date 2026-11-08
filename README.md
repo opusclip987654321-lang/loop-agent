@@ -89,6 +89,10 @@ Chaque heure, Loop Agent appelle l'automatisation n8n « CERVEAU - lecture des b
 
 Les workflows n8n « Nour Meet 1 » (9 h, repêchage 11 h 07) et « Nour Meet 3 » (9 h 30) lisent chaque matin la méthode (textes, recherches, relances, mails par jour) à une adresse secrète servie par Loop Agent (`/loop/nour-meet/<secret>`, sans connexion), au même format que le cerveau central. Si elle ne répond pas, n8n repart sur ses textes d'origine : rien ne s'arrête. Fichier `/data/nour-methode.json` (droits 600 : secret, méthode, historique). `node scripts/nour-methode.js voir | adresse | importer | revenir <v>`.
 
+## Relevé de la prospection Nūr Meet
+
+Chaque heure, `scripts/nour-meet-releve.py` (installé sur le VPS Nūr dans `~/outils/nour-releve/`, cron) lit les tableaux n8n np_* en lecture seule avec la clé n8n restée sur ce serveur, calcule seulement des chiffres (premiers mails, relances, échecs, ouvertures, réponses, découverts, versions) et les envoie à `POST /releve/nour-meet` avec un jeton (`scripts/releve-jeton.js creer`, seule l'empreinte est gardée). Loop Agent remplit les indicateurs « contactés » (somme du jour) et « taux d'ouverture » (7 jours glissants) du projet nourmeet ; un relevé du même jour remplace le précédent.
+
 ## Données
 
 Volume Docker `loop-agent_loop_agent_data` : `loop-agent.sqlite` (tout) et `files/` (factures).
