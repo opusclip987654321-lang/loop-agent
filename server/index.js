@@ -7,6 +7,7 @@ import { PROJECTS } from './projects.js';
 import { createRoutineRelay, loadRoutines } from './routines.js';
 import { createSurveillance } from './surveillance.js';
 import { createArgentRappels } from './argent-rappels.js';
+import { createBoites } from './boites.js';
 
 const config = {
   port: Number(process.env.PORT || 3000),
@@ -67,6 +68,9 @@ console.log(process.env.SURVEILLANCE === '0' ? 'Surveillance des sites : coupée
 // Rappels Argent : renouvellements à 3 jours et bilan du 1er du mois (reprise du cerveau central).
 const stopArgent = notifier.enabled ? createArgentRappels({ db, dataDir: config.dataDir, notify: (t) => notifier.send(t) }).start() : () => {};
 
+// Mails urgents des 6 boîtes Gmail, chaque heure (reprise du cerveau central). Sans adresse rangée, ne fait rien.
+const stopBoites = notifier.enabled ? createBoites({ dataDir: config.dataDir, notify: (t) => notifier.send(t) }).start() : () => {};
+
 const stopBackups = scheduleBackups({
   db,
   dataDir: config.dataDir,
@@ -87,6 +91,7 @@ function shutdown() {
   stopRelay();
   stopSurveillance();
   stopArgent();
+  stopBoites();
   stopBackups();
   server.close(() => {
     db.close();

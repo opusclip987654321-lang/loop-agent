@@ -81,6 +81,10 @@ Toutes les 5 minutes, Loop Agent vérifie les sites (nourmeet.com et son API, le
 
 Sur Telegram, à partir de 9 h (Paris) : un abonnement qui se renouvelle dans 3 jours ou moins (une fois par échéance), et le 1er du mois le total du mois fini, par devise et par projet (`server/argent-rappels.js`, mêmes calculs que la page Argent). Reprise du résumé du matin du cerveau central.
 
+## Mails urgents
+
+Chaque heure, Loop Agent appelle l'automatisation n8n « CERVEAU - lecture des boîtes » (6 boîtes Gmail, 3 derniers jours, lecture seule), trie par règles sans IA (`server/boites.js`, mêmes règles que le cerveau) et envoie chaque mail urgent une seule fois sur Telegram. L'adresse secrète de l'automatisation est dans `/data/boites.json` (droits 600), rangée par `scripts/boites-adresse.js ranger` (lue sur l'entrée standard, jamais affichée) ; `essai` affiche seulement des comptes.
+
 ## Données
 
 Volume Docker `loop-agent_loop_agent_data` : `loop-agent.sqlite` (tout) et `files/` (factures).
