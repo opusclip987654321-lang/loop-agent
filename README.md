@@ -77,6 +77,10 @@ Le script demande l'adresse puis le jeton (masqué). Ils sont rangés dans `/dat
 
 Toutes les 5 minutes, Loop Agent vérifie les sites (nourmeet.com et son API, leviaro.fr et son admin, vegebudget.fr, les deux n8n, le cerveau), leurs certificats HTTPS et son propre disque (`server/surveillance.js`). Un site qui rate est revérifié 30 s plus tard ; une seule alerte Telegram par panne, puis « rétabli » avec la durée. État dans `/data/surveillance.json`. `SURVEILLANCE=0` dans `.env` pour la couper. Reprise du cerveau central (novembre 2026).
 
+## Rappels Argent
+
+Sur Telegram, à partir de 9 h (Paris) : un abonnement qui se renouvelle dans 3 jours ou moins (une fois par échéance), et le 1er du mois le total du mois fini, par devise et par projet (`server/argent-rappels.js`, mêmes calculs que la page Argent). Reprise du résumé du matin du cerveau central.
+
 ## Données
 
 Volume Docker `loop-agent_loop_agent_data` : `loop-agent.sqlite` (tout) et `files/` (factures).
