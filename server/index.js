@@ -8,6 +8,7 @@ import { createRoutineRelay, loadRoutines } from './routines.js';
 import { createSurveillance } from './surveillance.js';
 import { createArgentRappels } from './argent-rappels.js';
 import { createBoites } from './boites.js';
+import { createSeo } from './seo.js';
 
 const config = {
   port: Number(process.env.PORT || 3000),
@@ -71,6 +72,9 @@ const stopArgent = notifier.enabled ? createArgentRappels({ db, dataDir: config.
 // Mails urgents des 6 boîtes Gmail, chaque heure (reprise du cerveau central). Sans adresse rangée, ne fait rien.
 const stopBoites = notifier.enabled ? createBoites({ dataDir: config.dataDir, notify: (t) => notifier.send(t) }).start() : () => {};
 
+// Compte rendu SEO du dimanche 8 h (reprise du cerveau central, sans IA).
+const stopSeo = createSeo({ db, dataDir: config.dataDir, notify: (t) => (notifier.enabled ? notifier.send(t) : Promise.resolve()) }).start();
+
 const stopBackups = scheduleBackups({
   db,
   dataDir: config.dataDir,
@@ -92,6 +96,7 @@ function shutdown() {
   stopSurveillance();
   stopArgent();
   stopBoites();
+  stopSeo();
   stopBackups();
   server.close(() => {
     db.close();

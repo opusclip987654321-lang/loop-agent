@@ -357,6 +357,9 @@ export function createAgentTools({ db, dataDir, onAgentWrite = () => {}, onToolD
             messages_de_walid: (t.reviewConversation || []).filter((m) => m.role === 'Walid').slice(-5),
           })),
           indicateurs: kpisView(doc),
+          seo: (doc.seo || [])[0]
+            ? { semaine: doc.seo[0].semaine, site: doc.seo[0].site, note_sur_100: doc.seo[0].note, note_precedente: doc.seo[1]?.note ?? null, actions_possibles: doc.seo[0].actions.map((a) => a.texte), consigne: 'Compte rendu SEO du dimanche (sans IA). Pour corriger un point, proposer_action ou proposer_idee : rien ne se change sans la validation de Walid.' }
+            : undefined,
           bilans_a_ecrire: missingBilans(doc),
           derniers_bilans: (doc.bilans || []).slice(0, 4).map((b) => ({ periode: b.gran + ' ' + b.period, pourquoi: b.why, action_decisive: b.decisive || undefined, par: b.by })),
           memoire: (doc.memories || []).map((m, index) => ({

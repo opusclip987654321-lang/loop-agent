@@ -93,6 +93,10 @@ Les workflows n8n « Nour Meet 1 » (9 h, repêchage 11 h 07) et « Nour Meet 3 
 
 Chaque heure, `scripts/nour-meet-releve.py` (installé sur le VPS Nūr dans `~/outils/nour-releve/`, cron) lit les tableaux n8n np_* en lecture seule avec la clé n8n restée sur ce serveur, calcule seulement des chiffres (premiers mails, relances, échecs, ouvertures, réponses, découverts, versions) et les envoie à `POST /releve/nour-meet` avec un jeton (`scripts/releve-jeton.js creer`, seule l'empreinte est gardée). Loop Agent remplit les indicateurs « contactés » (somme du jour) et « taux d'ouverture » (7 jours glissants) du projet nourmeet ; un relevé du même jour remplace le précédent.
 
+## Compte rendu SEO
+
+Chaque dimanche à partir de 8 h (Paris), Loop Agent contrôle nourmeet.com, vegebudget.fr et leviaro.fr comme Google, sans IA (`server/seo.js`, mêmes 17 contrôles et poids que le cerveau central) : note sur 100, actions possibles par importance. Le résultat est rangé dans chaque projet (26 semaines), lisible par les agents dans `lire_projet` (champ `seo`), et résumé sur Telegram.
+
 ## Données
 
 Volume Docker `loop-agent_loop_agent_data` : `loop-agent.sqlite` (tout) et `files/` (factures).
