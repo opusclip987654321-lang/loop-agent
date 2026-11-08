@@ -1442,7 +1442,7 @@ function expenseRow(e, attr) {
       (Math.round(e.invoice.amount * 100) !== Math.round(e.amount * 100)
         ? ` <span class="mwarn tiny">⚠️ ${amt(e.invoice.amount, e.cur)} sur la facture</span>`
         : '');
-  return `<tr ${attr}><td><strong>${esc(e.name)}</strong><br><span class="tiny">${esc(e.project)}</span></td><td class="r">${amt(e.amount, e.cur)}<br><span class="tiny">${e.freq === 'une fois' ? 'une fois' : 'par ' + e.freq}</span></td><td>${quand}</td><td>${inv}</td><td class="r" style="white-space:nowrap">${btn('Modifier', `editExpense('${e.id}')`)}${btn('✕', `removeExpense('${e.id}')`)}</td></tr>`;
+  return `<tr ${attr}><td><strong>${esc(e.name)}</strong><br><span class="tiny">${esc(e.project)}${e.addedBy === 'agent' || e.updatedBy === 'agent' ? ' · noté par l’agent' : ''}</span></td><td class="r">${amt(e.amount, e.cur)}${e.estimate ? '<br><span class="tiny mwarn">estimation</span>' : ''}<br><span class="tiny">${e.freq === 'une fois' ? 'une fois' : 'par ' + e.freq}</span></td><td>${quand}</td><td>${inv}</td><td class="r" style="white-space:nowrap">${btn('Modifier', `editExpense('${e.id}')`)}${btn('✕', `removeExpense('${e.id}')`)}</td></tr>`;
 }
 // ---------- historique ----------
 function moneyHistory() {

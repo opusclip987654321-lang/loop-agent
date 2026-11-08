@@ -900,6 +900,79 @@ export function createAgentTools({ db, dataDir, onAgentWrite = () => {}, onToolD
         }, 'agent:factures');
       },
     },
+    {
+      name: 'enregistrer_depense',
+      description:
+        'Note dans la page Argent une dépense RÉELLE du projet (abonnement, recharge, coût d’une API facturée : Google Cloud, Twilio…). Ce n’est qu’un relevé : tu n’engages jamais de dépense nouvelle sans l’accord de Walid. Donne toujours la source. Un abonnement déjà connu (même nom, même projet) est mis à jour au lieu d’être dupliqué. Un montant calculé et non lu sur une facture : estimation:true. Le coût affiché d’une session Claude n’est PAS une dépense (il est dans l’abonnement).',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          projet: { type: 'string', description: 'Identifiant du projet (lister_projets), ou « commun » pour une dépense partagée.' },
+          nom: { type: 'string', description: 'Nom court du fournisseur et de l’usage, ex. « Google Cloud (voix Gemini) ».' },
+          montant: { type: 'number', description: 'Montant payé (ou estimé), sur la période de la fréquence.' },
+          devise: { type: 'string', enum: ['€', '$'] },
+          frequence: { type: 'string', enum: ['mois', 'an', 'une fois'] },
+          date: { type: 'string', description: 'AAAA-MM-JJ : date du paiement, ou de la prochaine échéance pour un abonnement.' },
+          estimation: { type: 'boolean', description: 'true si le montant est calculé, pas lu sur une facture ou un relevé.' },
+          d_ou: { type: 'string', description: 'Source exacte (ex. « Console Google Cloud, Facturation → Rapports, octobre 2026 »).' },
+        },
+        required: ['projet', 'nom', 'montant', 'devise', 'frequence', 'd_ou'],
+      },
+      handler(args) {
+        const projectName = args.projet === 'commun' ? 'Commun (plusieurs projets)' : findProject(args.projet).name;
+        const name = text(args.nom, 'nom', { max: 80 });
+        if (typeof args.montant !== 'number' || !(args.montant > 0) || args.montant > 100000)
+          throw new ToolError('« montant » doit être un nombre positif (jamais 0 : une donnée absente ne se note pas).');
+        const amount = Math.round(args.montant * 100) / 100;
+        const cur = oneOf(args.devise, 'devise', ['€', '$']);
+        const freq = oneOf(args.frequence, 'frequence', ['mois', 'an', 'une fois']);
+        const date = args.date ? String(args.date) : '';
+        if (date && !/^\d{4}-\d{2}-\d{2}$/.test(date)) throw new ToolError('« date » doit être au format AAAA-MM-JJ.');
+        const origin = text(args.d_ou, 'd_ou', { max: 300 });
+        const estimate = args.estimation === true;
+        return mutate(
+          'money',
+          defaultMoneyDoc,
+          (money) => {
+            money.expenses = money.expenses || [];
+            money.corrections = money.corrections || [];
+            const same = (e) => e.project === projectName && String(e.name).toLowerCase() === name.toLowerCase();
+            const note = (detail) =>
+              money.corrections.unshift({ id: uid('corr'), label: `${name} (agent)`, detail: `${detail} — source : ${origin}`, at: nowIso(), undone: false });
+            if (freq !== 'une fois') {
+              const e = money.expenses.find((x) => same(x) && x.freq !== 'une fois');
+              if (e) {
+                const before = `${e.amount} ${e.cur} / ${e.freq}`;
+                Object.assign(e, { amount, cur, freq, origin, estimate: estimate || undefined, updatedBy: 'agent', updatedAt: nowIso() });
+                if (date) e.date = date;
+                note(`mise à jour : ${before} → ${amount} ${cur} / ${freq}${estimate ? ' (estimation)' : ''}`);
+                return `Dépense « ${name} » mise à jour (${before} → ${amount} ${cur} / ${freq}).`;
+              }
+            } else if (money.expenses.some((x) => same(x) && x.freq === 'une fois' && x.date === date && x.amount === amount)) {
+              throw new ToolError('Cette dépense est déjà notée (même nom, même date, même montant).');
+            }
+            money.expenses.push({
+              id: uid('dep'),
+              name,
+              amount,
+              cur,
+              freq,
+              date,
+              project: projectName,
+              invoice: null,
+              ...(freq !== 'une fois' ? { since: (date || today()).slice(0, 7) } : {}),
+              origin,
+              ...(estimate ? { estimate: true } : {}),
+              addedBy: 'agent',
+              addedAt: nowIso(),
+            });
+            note(`ajoutée : ${amount} ${cur} / ${freq}${estimate ? ' (estimation)' : ''}`);
+            return `Dépense « ${name} » ajoutée à la page Argent (${projectName}).`;
+          },
+          `agent:${args.projet}`,
+        );
+      },
+    },
   ];
 
   // Les erreurs métier (ToolError) sont renvoyées à l'agent pour qu'il corrige.
@@ -937,4 +1010,5 @@ export const CONNECTOR_INSTRUCTIONS = `Loop Agent est le tableau de bord des bou
 8. Réfléchis comme un analyste de l'internaute, pas comme un compteur. Peu de résultats ne veut pas dire « ça ne marche pas » : trouve à quelle étape la personne décroche. Mail pas ouvert → analyse l'objet. Ouvert sans clic → analyse le contenu. Clic puis départ → analyse le site. Examine si une offre gratuite changerait la donne. Propose de vraies alternatives à tester, pas des constats.
 9. Lis les règles d'or du projet (regles dans lire_projet) : ce sont des décisions de Walid.
 10. Résultats : propose 3 à 6 indicateurs clés par projet (proposer_indicateur) s'il n'y en a pas ; mesure les indicateurs validés à chaque tour (enregistrer_indicateur) ; écris les bilans dus (lire_projet → bilans_a_ecrire) avec ecrire_bilan : pourquoi on a progressé ou reculé par rapport à la période précédente, et l'action qui a changé la donne.
+11. Argent : quand tu connais une dépense réelle du projet (abonnement, recharge, API facturée), note-la avec enregistrer_depense et sa source ; un montant calculé se marque estimation:true. Le coût affiché d'une session Claude n'est pas une dépense. Tu n'engages jamais de dépense nouvelle sans l'accord de Walid.
 Jamais de mot de passe, de clé ni de jeton dans ce que tu écris.`;
