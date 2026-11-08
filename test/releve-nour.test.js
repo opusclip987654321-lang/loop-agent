@@ -28,16 +28,17 @@ test('seuls des nombres entrent ; noms et textes sont rejetés', () => {
 });
 
 test('remplit les indicateurs ; un nouveau relevé du même jour remplace l’ancien (pas de double compte)', () => {
-  const doc = { kpis, kpiValues: [{ id: 'a', kpi: 'k-contact', date: '2026-11-07', source: 'agent', value: 8 }] };
+  const doc = { kpis, kpiValues: [{ id: 'a', kpi: 'k-contact', date: '2026-11-07', source: 'agent', value: 8 }, { id: 'b', kpi: 'k-contact', date: '2026-11-01', source: 'agent', value: 5 }] };
   appliquer(doc, nettoyer(releve), '2026-11-07T10:00:00Z');
   appliquer(doc, nettoyer({ ...releve, jours: { '2026-11-07': { ...releve.jours['2026-11-07'], premiers: 15 } } }), '2026-11-07T11:00:00Z');
   const contact = doc.kpiValues.filter((v) => v.kpi === 'k-contact' && v.source === 'releve-n8n');
   assert.equal(contact.length, 1);
   assert.equal(contact[0].value, 15);
-  assert.equal(doc.kpiValues.find((v) => v.source === 'agent').value, 8, 'la valeur de l’agent n’est pas touchée');
+  assert.equal(doc.kpiValues.some((v) => v.kpi === 'k-contact' && v.date === '2026-11-07' && v.source === 'agent'), false, 'la mesure de l’agent du même jour est remplacée (pas de double compte)');
   assert.equal(doc.kpiValues.find((v) => v.kpi === 'k-ouv').value, 25);
   assert.equal(doc.kpiValues.some((v) => v.kpi === 'k-int'), false, 'les réponses intéressées demandent un tri : pas remplies ici');
   assert.equal(doc.releveN8n.jours['2026-11-07'].relances, 30);
+  assert.equal(doc.kpiValues.find((v) => v.id === 'b').value, 5, 'un autre jour n’est pas touché');
 });
 
 let dataDir, db, server, base;

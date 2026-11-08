@@ -71,8 +71,10 @@ export function appliquer(doc, releve, nowIso) {
   const contact = kpis.find((k) => /contact/i.test(k.name));
   const ouverture = kpis.find((k) => /ouverture/i.test(k.name));
   doc.kpiValues = doc.kpiValues || [];
+  // Le relevé lit directement n8n : pour ce jour et cet indicateur, il remplace toute autre
+  // mesure (celle d'un agent qui recopiait Notion, par exemple), sinon une somme compterait double.
   const poser = (kpi, date, value, note) => {
-    doc.kpiValues = doc.kpiValues.filter((v) => !(v.kpi === kpi.id && v.date === date && v.source === SOURCE));
+    doc.kpiValues = doc.kpiValues.filter((v) => !(v.kpi === kpi.id && v.date === date));
     doc.kpiValues.unshift({ id: 'rel-' + kpi.id.slice(-6) + '-' + date, kpi: kpi.id, date, at: nowIso, source: SOURCE, origin: ORIGIN, note, value });
   };
   const ecrits = [];
