@@ -85,6 +85,10 @@ Sur Telegram, à partir de 9 h (Paris) : un abonnement qui se renouvelle dans 3 
 
 Chaque heure, Loop Agent appelle l'automatisation n8n « CERVEAU - lecture des boîtes » (6 boîtes Gmail, 3 derniers jours, lecture seule), trie par règles sans IA (`server/boites.js`, mêmes règles que le cerveau) et envoie chaque mail urgent une seule fois sur Telegram. L'adresse secrète de l'automatisation est dans `/data/boites.json` (droits 600), rangée par `scripts/boites-adresse.js ranger` (lue sur l'entrée standard, jamais affichée) ; `essai` affiche seulement des comptes.
 
+## Méthode de la loop Nūr Meet
+
+Les workflows n8n « Nour Meet 1 » (9 h, repêchage 11 h 07) et « Nour Meet 3 » (9 h 30) lisent chaque matin la méthode (textes, recherches, relances, mails par jour) à une adresse secrète servie par Loop Agent (`/loop/nour-meet/<secret>`, sans connexion), au même format que le cerveau central. Si elle ne répond pas, n8n repart sur ses textes d'origine : rien ne s'arrête. Fichier `/data/nour-methode.json` (droits 600 : secret, méthode, historique). `node scripts/nour-methode.js voir | adresse | importer | revenir <v>`.
+
 ## Données
 
 Volume Docker `loop-agent_loop_agent_data` : `loop-agent.sqlite` (tout) et `files/` (factures).

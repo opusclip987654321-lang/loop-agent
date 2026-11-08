@@ -7,6 +7,7 @@ import { PROJECTS, isValidDocKey } from './projects.js';
 import { verifyPassword, newSessionToken, tokenHash, createLoginLimiter } from './auth.js';
 import { createMcpHandler } from './mcp.js';
 import { createAgentTools, CONNECTOR_INSTRUCTIONS } from './agent-tools.js';
+import { servir as servirMethodeNour } from './nour-methode.js';
 
 const PUBLIC_DIR = fileURLToPath(new URL('../public/', import.meta.url));
 const COOKIE = 'la_session';
@@ -314,6 +315,8 @@ export function createApp({
     const path = url.pathname;
     try {
       if (path === '/healthz') return send(res, 200, { ok: true });
+      // Méthode de la loop Nūr Meet, lue chaque matin par n8n (adresse secrète, sans connexion).
+      if (req.method === 'GET' && servirMethodeNour(dataDir, path, res)) return;
       // Pas d'OAuth : la connexion se fait par une clé dans l'en-tête. On répond
       // clairement « rien ici » (404) aux recherches de configuration OAuth.
       if (path.startsWith('/.well-known/')) throw new HttpError(404, 'Introuvable.');
