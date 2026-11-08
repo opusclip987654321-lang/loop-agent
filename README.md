@@ -73,6 +73,10 @@ ssh -t loop-agent-vps 'docker exec -it loop-agent node scripts/routine-jeton.js 
 
 Le script demande l'adresse puis le jeton (masqué). Ils sont rangés dans `/data/routines.json` (droits 600), jamais dans le code. `liste` montre les projets branchés, `retirer <projet>` en débranche un. Pas besoin de redémarrer. Garde-fou : une relance par projet toutes les 30 minutes au plus (`ROUTINE_COOLDOWN_MINUTES`).
 
+## Surveillance des sites
+
+Toutes les 5 minutes, Loop Agent vérifie les sites (nourmeet.com et son API, leviaro.fr et son admin, vegebudget.fr, les deux n8n, le cerveau), leurs certificats HTTPS et son propre disque (`server/surveillance.js`). Un site qui rate est revérifié 30 s plus tard ; une seule alerte Telegram par panne, puis « rétabli » avec la durée. État dans `/data/surveillance.json`. `SURVEILLANCE=0` dans `.env` pour la couper. Reprise du cerveau central (novembre 2026).
+
 ## Données
 
 Volume Docker `loop-agent_loop_agent_data` : `loop-agent.sqlite` (tout) et `files/` (factures).

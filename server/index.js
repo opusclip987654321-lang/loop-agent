@@ -5,6 +5,7 @@ import { createNotifier } from './telegram.js';
 import { scheduleBackups } from './backup.js';
 import { PROJECTS } from './projects.js';
 import { createRoutineRelay, loadRoutines } from './routines.js';
+import { createSurveillance } from './surveillance.js';
 
 const config = {
   port: Number(process.env.PORT || 3000),
@@ -55,6 +56,13 @@ const stopRelay = relay.start();
   console.log(n ? `Relance des agents : ${n} projet(s) branché(s).` : 'Relance des agents : aucun projet branché (npm run routine-jeton).');
 }
 
+// Surveillance des sites (reprise du cerveau central). SURVEILLANCE=0 pour la couper.
+const stopSurveillance =
+  process.env.SURVEILLANCE === '0'
+    ? () => {}
+    : createSurveillance({ dataDir: config.dataDir, notify: (text) => (notifier.enabled ? notifier.send(text) : Promise.resolve()) }).start();
+console.log(process.env.SURVEILLANCE === '0' ? 'Surveillance des sites : coupée.' : 'Surveillance des sites : active (toutes les 5 min).');
+
 const stopBackups = scheduleBackups({
   db,
   dataDir: config.dataDir,
@@ -73,6 +81,7 @@ server.listen(config.port, config.host, () => {
 function shutdown() {
   stopTelegram();
   stopRelay();
+  stopSurveillance();
   stopBackups();
   server.close(() => {
     db.close();
