@@ -19,10 +19,14 @@ const MIME = {
   '.css': 'text/css; charset=utf-8',
   '.svg': 'image/svg+xml',
   '.ico': 'image/x-icon',
+  '.png': 'image/png',
 };
 
 // Pages accessibles sans être connecté.
 const PUBLIC_PATHS = new Set(['/login', '/healthz', '/style.css', '/favicon.svg']);
+// Logos des chaînes Impacteur, affichés dans les mails envoyés aux invités : publics
+// (repris du cerveau central, novembre 2026).
+const PUBLIC_PATTERNS = [/^\/logos\/[\w-]+\.png$/];
 
 const SECURITY_HEADERS = {
   'X-Content-Type-Options': 'nosniff',
@@ -335,7 +339,7 @@ export function createApp({
       }
       if (path.startsWith('/api/')) return await handleApi(req, res, path);
       if (req.method !== 'GET' && req.method !== 'HEAD') throw new HttpError(405, 'Méthode non permise.');
-      if (!PUBLIC_PATHS.has(path) && !isAuthed(req)) {
+      if (!PUBLIC_PATHS.has(path) && !PUBLIC_PATTERNS.some((re) => re.test(path)) && !isAuthed(req)) {
         if (path === '/' || path.endsWith('.html')) {
           res.writeHead(302, { Location: '/login', 'Cache-Control': 'no-store' });
           return res.end();

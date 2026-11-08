@@ -445,3 +445,13 @@ test('un enregistrement de Walid transmet l’ancienne et la nouvelle version (r
     assert.equal(mine[1][1], v1);
   assert.equal(mine[1][2], v2);
 });
+
+test('logos Impacteur : publics sans connexion, rien d’autre ne l’est', async () => {
+  const r = await fetch(base + '/logos/impacteur-afrique.png');
+  assert.equal(r.status, 200);
+  assert.equal(r.headers.get('content-type'), 'image/png');
+  assert.ok((await r.arrayBuffer()).byteLength > 1000);
+  assert.equal((await fetch(base + '/logos/inconnu.png')).status, 404);
+  assert.notEqual((await fetch(base + '/app.js')).status, 200, 'le reste demande toujours la connexion');
+  assert.notEqual((await fetch(base + '/logos/../app.js')).status, 200);
+});
