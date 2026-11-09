@@ -40,7 +40,7 @@ const n = (v) => (Number.isFinite(Number(v)) && Number(v) >= 0 ? Math.round(Numb
 export function nettoyer(body) {
   if (!body || typeof body !== 'object' || !body.jours || typeof body.jours !== 'object') throw new Error('Format attendu : { jours: { "AAAA-MM-JJ": {…} }, glissant7: {…} }');
   const jours = {};
-  for (const [d, s] of Object.entries(body.jours).slice(0, 10)) {
+  for (const [d, s] of Object.entries(body.jours).sort().slice(-120)) {
     if (!JOUR.test(d) || !s || typeof s !== 'object') continue;
     const versions = {};
     for (const [v, c] of Object.entries(s.versions || {}).slice(0, 20)) if (/^v\d{1,3}$/.test(v) && n(c) !== null) versions[v] = n(c);
@@ -52,6 +52,8 @@ export function nettoyer(body) {
       reponses: n(s.reponses),
       decouverts: n(s.decouverts),
       inscriptions: s.inscriptions === undefined ? null : n(s.inscriptions),
+      envoyes7: s.envoyes7 === undefined ? null : n(s.envoyes7),
+      ouverts7: s.ouverts7 === undefined ? null : n(s.ouverts7),
       versions,
     };
   }
@@ -66,7 +68,7 @@ export function nettoyer(body) {
 export function appliquer(doc, releve, nowIso) {
   doc.releveN8n = doc.releveN8n || { jours: {} };
   for (const [d, s] of Object.entries(releve.jours)) doc.releveN8n.jours[d] = s;
-  const garder = Object.keys(doc.releveN8n.jours).sort().slice(-90);
+  const garder = Object.keys(doc.releveN8n.jours).sort().slice(-400);
   doc.releveN8n.jours = Object.fromEntries(garder.map((d) => [d, doc.releveN8n.jours[d]]));
   doc.releveN8n.glissant7 = releve.glissant7;
   doc.releveN8n.maj = nowIso;
@@ -92,6 +94,13 @@ export function appliquer(doc, releve, nowIso) {
         ecrits.push(contact.name + ' ' + d);
       }
   const g = releve.glissant7;
+  // Rattrapage : le taux d'ouverture de chaque jour passé (7 jours finissant ce jour-là).
+  if (ouverture)
+    for (const [d, s] of Object.entries(releve.jours))
+      if (s.envoyes7 && s.ouverts7 !== null) {
+        poser(ouverture, d, Math.round((s.ouverts7 / s.envoyes7) * 1000) / 10, `${s.ouverts7} mail(s) ouvert(s) sur ${s.envoyes7} envoyé(s) sur les 7 jours finissant ce jour-là.`);
+        ecrits.push(ouverture.name + ' ' + d);
+      }
   if (ouverture && g.envoyes) {
     const aujourdhui = Object.keys(releve.jours).sort().pop();
     const taux = Math.round((g.ouverts / g.envoyes) * 1000) / 10;
@@ -118,7 +127,7 @@ export function appliquer(doc, releve, nowIso) {
     doc.kpiValues[0].origin = ORIGIN_BASE;
     ecrits.push(abonnes.name + ' ' + auj);
   }
-  doc.kpiValues = doc.kpiValues.slice(0, 2000);
+  doc.kpiValues = doc.kpiValues.slice(0, 4000);
   return ecrits;
 }
 

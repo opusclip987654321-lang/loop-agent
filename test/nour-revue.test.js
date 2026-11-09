@@ -97,3 +97,15 @@ test('outils : revue due, écriture, radical devient une demande à Walid', asyn
     rmSync(dataDir, { recursive: true, force: true });
   }
 });
+
+test('rattrapage du relevé : chaque jour passé reçoit ses contacts et son taux d’ouverture', async () => {
+  const { appliquer } = await import('../server/releve-nour.js');
+  const jours = {};
+  for (let i = 1; i <= 40; i++) jours[`2026-10-${String((i % 28) + 1).padStart(2, '0')}`] = { premiers: i, envoyes7: 10, ouverts7: 3 };
+  const r = nettoyer({ jours, glissant7: {} });
+  assert.ok(Object.keys(r.jours).length >= 28);
+  const doc = { kpis: [{ id: 'k-contact', name: 'Restaurants contactés', status: 'valide' }, { id: 'k-ouv', name: 'Taux d’ouverture', status: 'valide' }], kpiValues: [] };
+  appliquer(doc, r, '2026-11-09T20:00:00Z');
+  assert.equal(doc.kpiValues.filter((v) => v.kpi === 'k-ouv').length, Object.keys(r.jours).length);
+  assert.equal(doc.kpiValues.find((v) => v.kpi === 'k-ouv').value, 30);
+});

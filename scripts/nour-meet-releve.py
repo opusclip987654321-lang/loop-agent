@@ -27,6 +27,9 @@ ENV_N8N = pathlib.Path.home() / "outils" / "sauvegarde-n8n" / ".env"
 LOOP_AGENT = "https://loopagent.actualitevideo.fr/releve/nour-meet"
 PARIS = ZoneInfo("Europe/Paris")
 ESSAI = "--essai" in sys.argv
+# Rattrapage (09/11/2026) : renvoie une fois tous les jours depuis le début de la prospection.
+RATTRAPAGE = "--rattrapage" in sys.argv
+DEBUT = datetime.date(2026, 9, 25)
 
 
 def lire_env(chemin):
@@ -103,7 +106,7 @@ if not envois and "np_envois" not in ids:
     sys.exit("tableau np_envois introuvable dans n8n")
 
 aujourdhui = datetime.datetime.now(PARIS).date()
-jours = [(aujourdhui - datetime.timedelta(days=i)).isoformat() for i in (1, 0)]
+jours = [(aujourdhui - datetime.timedelta(days=i)).isoformat() for i in ((range((aujourdhui - DEBUT).days, -1, -1)) if RATTRAPAGE else (1, 0))]
 debut7 = (aujourdhui - datetime.timedelta(days=6)).isoformat()
 
 
@@ -133,6 +136,12 @@ for d in jours:
     s["ouvertures"] = sum(1 for x in premiere_ouverture.values() if x == d)
     s["reponses"] = sum(1 for r in reponses if jour_de(r.get("recu")) == d)
     s["decouverts"] = sum(1 for p in prospects if jour_de(p.get("date_decouverte")) == d)
+    if RATTRAPAGE:
+        # taux d'ouverture sur les 7 jours finissant ce jour-là (comme glissant7, mais pour chaque jour)
+        d7 = (datetime.date.fromisoformat(d) - datetime.timedelta(days=6)).isoformat()
+        env = [l for l in envois if l.get("statut") == "envoye" and d7 <= (jour_envoi(l) or "") <= d]
+        s["envoyes7"] = len(env)
+        s["ouverts7"] = sum(1 for l in env if str(l.get("id")) in premiere_ouverture and premiere_ouverture[str(l.get("id"))] <= d)
     stats[d] = s
 
 envoyes7 = [l for l in envois if l.get("statut") == "envoye" and (jour_envoi(l) or "") >= debut7]
@@ -252,7 +261,7 @@ SELECT json_build_object(
   'jours', (SELECT coalesce(json_object_agg(j, n), '{}') FROM (
       SELECT to_char("createdAt" AT TIME ZONE 'Europe/Paris', 'YYYY-MM-DD') j, count(*) n FROM "User"
       WHERE role = 'ORGANIZER' AND NOT "isDemo" AND "deletedAt" IS NULL
-        AND "createdAt" > now() - interval '3 days' GROUP BY 1) t),
+        AND "createdAt" > now() - interval '%s' GROUP BY 1) t),
   'total', (SELECT count(*) FROM "User" WHERE role = 'ORGANIZER' AND NOT "isDemo" AND "deletedAt" IS NULL),
   'abonnes', (SELECT count(DISTINCT "restaurantId") FROM "RestaurantSubscription"
       WHERE lower(status::text) IN ('active', 'trialing') AND "cancelledAt" IS NULL)
@@ -262,7 +271,7 @@ try:
     import subprocess
     sortie = subprocess.run(
         ["docker", "exec", "-i", "nour-v2-postgres-1", "sh", "-c", 'psql -U "$POSTGRES_USER" -d "${POSTGRES_DB:-nour_meet}" -At -v ON_ERROR_STOP=1'],
-        input=SQL, capture_output=True, text=True, timeout=30,
+        input=SQL % ("60 days" if RATTRAPAGE else "3 days"), capture_output=True, text=True, timeout=30,
     )
     if sortie.returncode == 0 and sortie.stdout.strip():
         r = json.loads(sortie.stdout.strip().splitlines()[-1])
