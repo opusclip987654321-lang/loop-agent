@@ -12,7 +12,45 @@
 export const STAGES = ['Planification', 'Priorités', 'Exécution', 'Vérification', 'Révision', 'Mémoire'];
 const rang = (s) => Math.max(0, STAGES.indexOf(s));
 
-export const active = (i) => i && typeof i === 'object' && !i.dropped && i.approvalStatus !== 'pending' && i.approvalStatus !== 'rejected';
+export const active = (i) => i && typeof i === 'object' && !i.dropped && !i.done && i.approvalStatus !== 'pending' && i.approvalStatus !== 'rejected';
+
+// Une idée finie (faite, ou remplacée par autre chose) quitte l'action et va dans la Mémoire
+// (décision de Walid du 09/11/2026 : il n'a pas le temps de passer derrière). Renvoie l'entrée de mémoire.
+export function finirIdee(t, idea, { preuve, remplaceePar, par = 'agent', jour, at }) {
+  if (!idea || idea.done) return null;
+  idea.done = { le: jour, at, comment: remplaceePar ? 'remplacée' : 'faite', preuve, remplaceePar: remplaceePar || undefined, par };
+  if (idea.latestStage !== 'Mémoire') {
+    idea.latestStage = 'Mémoire';
+    (idea.stageHistory = idea.stageHistory || []).push({ stage: 'Mémoire', at: jour, auto: true });
+  }
+  return {
+    taskId: t.id,
+    kind: remplaceePar ? 'Décisions' : 'Réussites',
+    date: jour,
+    cycle: jour,
+    tag: remplaceePar ? 'Idée remplacée' : 'Idée faite',
+    title: String(idea.text || '').slice(0, 200),
+    text: preuve,
+    lesson: remplaceePar ? `Plus besoin : remplacée par ${remplaceePar}.` : 'Faite : à garder en tête pour la suite de l’action.',
+    state: 'confirmée',
+  };
+}
+
+// Une action finie (toutes ses idées faites, ou terminée par l'agent avec une raison) quitte la
+// Planification, les Priorités, l'Exécution et la Vérification ; elle reste dans Mémoire et Révision.
+export function finirAction(t, { raison, jour, at, par = 'agent' }) {
+  if (t.done) return null;
+  t.done = true;
+  t.doneAt = at;
+  t.doneReason = raison;
+  t.status = 'Terminée';
+  return { taskId: t.id, kind: 'Réussites', date: jour, cycle: jour, tag: 'Action terminée', title: String(t.title || '').slice(0, 200), text: raison, lesson: 'Action terminée : elle ne tourne plus.', state: 'confirmée', by: par };
+}
+
+export const toutesFinies = (t) => {
+  const vivantes = (t.ideas || []).filter((i) => i && typeof i === 'object' && !i.dropped && i.approvalStatus !== 'pending' && i.approvalStatus !== 'rejected');
+  return vivantes.length > 0 && vivantes.every((i) => i.done);
+};
 
 // Fait avancer l'idée jusqu'à « stade » si elle est derrière. Renvoie true si elle a bougé.
 export function avancer(idea, stade, jour) {

@@ -25,7 +25,7 @@ import '../public/periodes.js';
 const P = globalThis.LAPeriodes;
 const KPI_AGG = ['somme', 'dernier'];
 
-import { STAGES, synchroniser, apresTour, apresResultat, apresLecon, resumeStades, aFaireDAbord } from './stades.js';
+import { STAGES, synchroniser, apresTour, apresResultat, apresLecon, resumeStades, aFaireDAbord, finirIdee, finirAction, toutesFinies } from './stades.js';
 const LESSON_STATES = ['à tester', 'confirmée', 'invalidée'];
 const MEMORY_KINDS = ['Réussites', 'Échecs', 'Hypothèses', 'Décisions', 'Règles d’or', 'Hooks efficaces', 'Hooks rejetés', 'Styles visuels / Voix'];
 const TYPES = ['Boucle', 'Ponctuelle'];
@@ -378,6 +378,7 @@ export function createAgentTools({ db, dataDir, onAgentWrite = () => {}, onToolD
                 }
               : undefined,
             arretee: t.stopped ? { motif: t.stopReason || '' } : undefined,
+            terminee: t.done ? { le: String(t.doneAt || '').slice(0, 10), raison: t.doneReason || undefined } : undefined,
             a_faire_d_abord: (() => {
               const x = t.proposalStatus === 'pending' || t.proposalStatus === 'rejected' || t.stopped ? [] : aFaireDAbord(t);
               return x.length ? x : undefined;
@@ -386,6 +387,7 @@ export function createAgentTools({ db, dataDir, onAgentWrite = () => {}, onToolD
             idees: t.ideas.map((i, index) => ({
               index,
               texte: i.text,
+              faite: i.done ? { le: i.done.le, preuve: i.done.preuve, remplacee_par: i.done.remplaceePar } : undefined,
               stade: i.latestStage,
               source: i.source || 'Walid',
               validation: i.approvalStatus,
@@ -438,7 +440,8 @@ export function createAgentTools({ db, dataDir, onAgentWrite = () => {}, onToolD
           decision: { type: 'string', description: 'Ce que l’agent décide (continuer, ajuster, arrêter un essai…) et pourquoi.' },
           suite: { type: 'string', description: 'Ce qui est prévu au prochain tour.' },
           statut: { type: 'string', description: 'Nouveau statut affiché de l’action (ex. « En cours », « Terminée »). Facultatif.' },
-          terminee: { type: 'boolean', description: 'Pour une action ponctuelle finie : true. Elle quitte Planification, Exécution et Priorités.' },
+          terminee: { type: 'boolean', description: 'Action finie : true. Elle quitte Planification, Priorités, Exécution et Vérification et va dans la Mémoire. Une boucle ne se termine qu’avec « raison_fin » (ex. remplacée par un relevé automatique).' },
+          raison_fin: { type: 'string', description: 'Avec terminee : pourquoi l’action est finie, preuve à l’appui (chiffre, lien, date, ou ce qui la remplace).' },
           idees: {
             type: 'array',
             description: 'Mises à jour d’idées de cette action.',
@@ -448,6 +451,9 @@ export function createAgentTools({ db, dataDir, onAgentWrite = () => {}, onToolD
                 index: { type: 'integer' },
                 stade: { type: 'string', enum: STAGES },
                 commentaire: { type: 'string' },
+                faite: { type: 'boolean', description: 'L’idée est FAITE (preuve obligatoire) : elle quitte l’action et va dans la Mémoire.' },
+                remplacee_par: { type: 'string', description: 'L’idée n’a plus lieu d’être car autre chose la remplace (ex. « le relevé Patreon automatique ») : elle quitte l’action et va dans la Mémoire. Preuve obligatoire.' },
+                preuve: { type: 'string', description: 'Avec faite ou remplacee_par : la preuve en une phrase (chiffre, lien, date).' },
                 erreur: { type: 'string', description: 'Si l’idée est bloquée par une erreur : la décrire (l’idée passe au rouge). Chaîne vide pour lever l’erreur.' },
                 contexte: { type: 'string', description: 'OBLIGATOIRE avec erreur : en mots simples, ce que tu voulais faire, pourquoi c’est utile au projet, et ce qui t’en empêche (ex. « Je voulais regarder ce que les gens tapent sur Amazon pour choisir les mots-clés du livre ; je n’ai pas pu car le Chrome de Walid est déconnecté »).' },
               },
@@ -483,12 +489,24 @@ export function createAgentTools({ db, dataDir, onAgentWrite = () => {}, onToolD
             .map((x) => ouvrirDemande(t, x, { source: 'compte rendu' }))
             .filter(Boolean);
           if (args.statut) t.status = text(args.statut, 'statut', { max: 80 });
-          if (args.terminee === true) {
-            if (t.type !== 'Ponctuelle') throw new ToolError('Seule une action ponctuelle peut être terminée ; une boucle ne se termine jamais.');
-            t.done = true;
-            t.doneAt = nowIso();
-            t.status = 'Terminée';
+          const memoires = [];
+          for (const u of args.idees || []) {
+            if (!u.faite && !u.remplacee_par) continue;
+            const idea = t.ideas[u.index];
+            if (!idea) throw new ToolError(`Idée ${u.index} introuvable dans l’action ${t.id}.`);
+            const preuve = text(u.preuve, 'preuve (obligatoire pour une idée faite ou remplacée : chiffre, lien ou date)', { max: 600 });
+            const m = finirIdee(t, idea, { preuve, remplaceePar: u.remplacee_par ? text(u.remplacee_par, 'remplacee_par', { max: 200 }) : undefined, jour: today(), at: nowIso() });
+            if (m) memoires.push(m);
           }
+          if (args.terminee === true) {
+            if (t.type !== 'Ponctuelle' && !args.raison_fin) throw new ToolError('Une boucle ne se termine qu’avec « raison_fin » (ce qui la rend inutile, preuve à l’appui).');
+            const m = finirAction(t, { raison: text(args.raison_fin, 'raison_fin', { max: 800, required: false }) || entry.aiObservation.slice(0, 600), jour: today(), at: nowIso() });
+            if (m) memoires.push(m);
+          } else if (toutesFinies(t)) {
+            const m = finirAction(t, { raison: 'Toutes ses idées sont faites ou remplacées.', jour: today(), at: nowIso() });
+            if (m) memoires.push(m);
+          }
+          for (const m of memoires) (doc.memories = doc.memories || []).push({ id: uid('lecon'), ...m });
           for (const u of args.idees || []) {
             const idea = t.ideas[u.index];
             if (!idea) throw new ToolError(`Idée ${u.index} introuvable dans l’action ${t.id}.`);
@@ -1324,5 +1342,5 @@ export const CONNECTOR_INSTRUCTIONS = `Loop Agent est le tableau de bord des bou
 13. Questions de Walid : au DÉBUT de chaque tour, regarde dans lire_projet les demandes qui ont « question_de_walid_a_repondre » et réponds à chacune avec repondre_a_walid, clairement et simplement, avec tes arguments et ta recommandation. Mets bloque_sans_walid à true seulement si tu ne peux plus avancer sans une action de sa part (sinon pas de Telegram). La demande reste ouverte : c'est Walid qui la ferme quand il a décidé.
 14. Contexte : tout ce que Walid lit (demandes, blocages, comptes rendus) dit en mots simples ce que tu voulais faire, pourquoi c'est utile au projet, et ce qui se passe. Un blocage s'écrit avec ecrire_tour → idees[].erreur ET idees[].contexte. Une idée « abandonnee_par_walid » ne se refait pas ; « blocage_leve_par_walid » veut dire : réessaie.
 15. Nūr Meet : si lire_projet → reponses_restaurants → a_trier est supérieur à 0, appelle reponses_a_trier, classe chaque réponse selon la consigne, puis trier_reponses. Les intéressés deviennent seuls des demandes à Walid : ne les redemande pas.
-16. Étapes des idées : Loop Agent les fait avancer seul (Planification → Priorités → Exécution → Vérification → Révision → Mémoire) d’après tes tours, résultats et leçons. Si une action a « a_faire_d_abord », fais-le AVANT le travail du jour : c’est ce qui a été appris ou fait sans être noté.
+16. Étapes des idées : Loop Agent les fait avancer seul (Planification → Priorités → Exécution → Vérification → Révision → Mémoire) d’après tes tours, résultats et leçons. Si une action a « a_faire_d_abord », fais-le AVANT le travail du jour : c’est ce qui a été appris ou fait sans être noté. Une idée finie : ecrire_tour → idees[] avec faite:true (ou remplacee_par) et la preuve ; elle quitte l’action et va dans la Mémoire. Une action dont tout est fait se termine seule ; une boucle devenue inutile : terminee + raison_fin. Ne retravaille jamais une idée « faite » ni une action « terminee ».
 Jamais de mot de passe, de clé ni de jeton dans ce que tu écris.`;

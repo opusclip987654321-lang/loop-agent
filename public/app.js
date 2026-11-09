@@ -1,7 +1,7 @@
 // Interface de Loop Agent, issue de atelier-maquette.html (transformation : tools/transform-maquette.mjs).
 // Ordre du cycle décidé par Walid le 09/11/2026 (avant : Exécution, Vérification, Mémoire, Priorités, Révision).
 const pages = ['Planification', 'Priorités', 'Exécution', 'Vérification', 'Révision', 'Mémoire'],
-  slugs = ['planification', 'execution', 'verification', 'memoire', 'priorites', 'revision'];
+  slugs = ['planification', 'priorites', 'execution', 'verification', 'revision', 'memoire'];
 const moneyPage = { name: 'Argent', slug: 'argent' },
   categories = ['Site web', 'Application mobile', 'Réseaux sociaux', 'SEO', 'Design', 'Prospection', 'Autre'],
   formats = ['Short', 'Vidéo longue', 'Publication Communauté'];
@@ -317,7 +317,7 @@ function head(title, desc, action = '') {
 // Où en sont les idées de l'action dans le cycle (Loop Agent les fait avancer seul depuis le 09/11/2026).
 function etapesIdees(t) {
   const c = {};
-  for (const i of t.ideas || []) if (i && typeof i === 'object' && !i.dropped && i.approvalStatus !== 'pending' && i.approvalStatus !== 'rejected') c[i.latestStage || 'Planification'] = (c[i.latestStage || 'Planification'] || 0) + 1;
+  for (const i of t.ideas || []) if (i && typeof i === 'object' && !i.dropped && !i.done && i.approvalStatus !== 'pending' && i.approvalStatus !== 'rejected') c[i.latestStage || 'Planification'] = (c[i.latestStage || 'Planification'] || 0) + 1;
   const l = pages.filter((p) => c[p]).map((p) => `<span class="badge">${esc(p)} · ${c[p]}</span>`);
   return l.length ? `<div class="toolbar" style="margin:4px 0 8px"><span class="tiny">IDÉES</span>${l.join('')}</div>` : '';
 }
@@ -450,7 +450,9 @@ function toolsForIdea(t, i) {
 }
 function taskIdeaCards(t, showTools = false) {
   let ideas = t.ideas || [];
-  let order = ideas.map((x, n) => n).sort((a, b) => (ideaIsRed(ideas[b]) ? 1 : 0) - (ideaIsRed(ideas[a]) ? 1 : 0));
+  // Une idée finie (faite ou remplacée) quitte l'action : elle est dans la Mémoire (Walid, 09/11/2026).
+  let finies = ideas.filter((x) => x && typeof x === 'object' && x.done);
+  let order = ideas.map((x, n) => n).filter((n) => !(ideas[n] && ideas[n].done)).sort((a, b) => (ideaIsRed(ideas[b]) ? 1 : 0) - (ideaIsRed(ideas[a]) ? 1 : 0));
   let banner = '';
   let reds = ideas.filter(ideaIsRed);
   if (reds.length)
@@ -490,7 +492,7 @@ function taskIdeaCards(t, showTools = false) {
               : ''
           }</article>`;
         })
-        .join('') || '<div class="empty">Aucune idée proposée pour cette tâche.</div>'
+        .join('') + (finies.length ? `<p class="note green">✅ ${finies.length} idée${finies.length > 1 ? 's' : ''} finie${finies.length > 1 ? 's' : ''} : ${finies.map((x) => esc(x.text.slice(0, 60)) + (x.done.remplaceePar ? ' (remplacée par ' + esc(x.done.remplaceePar) + ')' : '')).join(' · ')} — dans la Mémoire de l’action.</p>` : '') || '<div class="empty">Aucune idée proposée pour cette tâche.</div>'
   );
 }
 function setTaskIdeaApproval(id, index, approved, showTools) {
@@ -1794,7 +1796,8 @@ function projectColorFor(id) {
 }
 // étapes concernées par une action
 function stagesFor(t) {
-  if (t.type === 'Ponctuelle' && t.done) return ['verification', 'memoire', 'revision'];
+  // Action finie (Walid, 09/11/2026) : elle quitte Planification, Priorités, Exécution et Vérification.
+  if (t.done) return ['memoire', 'revision'];
   return ['planification', 'execution', 'verification', 'memoire', 'priorites', 'revision'];
 }
 function showsOn(t, slug) {
