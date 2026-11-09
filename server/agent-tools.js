@@ -18,6 +18,7 @@ import { defaultProjectDoc, defaultMoneyDoc, newIdea } from './defaults.js';
 import { creerDepot } from './depots.js';
 import * as tri from './reponses-nour.js';
 import * as revue from './nour-revue.js';
+import { pourAgent as archivePourAgent } from './archive-notion.js';
 import '../public/periodes.js';
 
 const P = globalThis.LAPeriodes;
@@ -400,6 +401,7 @@ export function createAgentTools({ db, dataDir, onAgentWrite = () => {}, onToolD
             : undefined,
           reponses_restaurants: p.id === 'nourmeet' ? tri.resumePourAgent(tri.lireEtat(db)) : undefined,
           methode_prospection: p.id === 'nourmeet' && dataDir ? revue.resume(dataDir) || undefined : undefined,
+          archive_notion: archivePourAgent(doc.archiveNotion),
           bilans_a_ecrire: missingBilans(doc),
           derniers_bilans: (doc.bilans || []).slice(0, 4).map((b) => ({ periode: b.gran + ' ' + b.period, pourquoi: b.why, action_decisive: b.decisive || undefined, par: b.by })),
           memoire: (doc.memories || []).map((m, index) => ({

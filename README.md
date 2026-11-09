@@ -113,6 +113,10 @@ Le relevé horaire du serveur Nūr envoie aussi toutes les réponses des restaur
 
 Reprise du cerveau central (09/11/2026). Le relevé horaire du serveur Nūr envoie aussi chaque restaurant contacté (nom remplacé par une empreinte), son profil (département, recherche, prix, halal, privatisation), ses mails (jour, version, type) et les envois/échecs par jour (`server/nour-revue.js`). La tâche Claude « Revue du lundi Nūr Meet (Loop Agent) » (abonnement, chaque jour à 9 h 23, ne fait rien s'il n'y a pas de revue due) lit `revue_methode_nour` : méthode, leçons, historique, chiffres par version de mail et par profil, réponses triées. Elle décide seule (consigne identique au cerveau) et écrit avec `ecrire_revue_nour` : changement vérifié puis servi à n8n le lendemain ; changement « radical » (offre, prix, cible, zone) = demande à Walid, appliqué par la revue suivante seulement s'il dit oui. Filet : une nouvelle version qui casse les envois (plus de la moitié en échec, ou plus rien pendant 3 jours) est annulée seule à la réception du relevé. Historique, leçons et revues passées importés du cerveau : `docker exec -i loop-agent node scripts/nour-methode.js importer-revue < loop-nour-meet.json`.
 
+## Archive Notion (import unique du 09/11/2026)
+
+Avant l'arrêt du cerveau central, l'historique tenu dans Notion « Loops des projets » est recopié dans chaque projet : décisions et leçons datées (« 📜 Décisions des loops », 129 lignes), page complète de chaque projet (« 🧠 Mes projets »), règles des loops et revue hebdo du système (projet Gestion), lignes « ✅ Fait pour Walid ». Les agents le lisent dans `lire_projet` → `archive_notion` (`server/archive-notion.js`). Notion n'est ni modifié ni effacé. Export en lecture seule sur le serveur Nūr, import dans Loop Agent : `ssh ubuntu@57.131.152.36 'python3 -' < scripts/notion-export.py | ssh loop-agent-vps 'docker exec -i loop-agent node scripts/import-notion.js'` (relançable).
+
 ## Données
 
 Volume Docker `loop-agent_loop_agent_data` : `loop-agent.sqlite` (tout) et `files/` (factures).
