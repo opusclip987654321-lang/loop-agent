@@ -406,12 +406,12 @@ export function createApp({
         }
         let releve;
         try {
-          releve = nettoyerReleve(await readJson(req, 256 * 1024));
+          releve = nettoyerReleve(await readJson(req, 1024 * 1024));
         } catch (e) {
           throw e instanceof HttpError ? e : new HttpError(400, String(e.message || e));
         }
         const ecrits = enregistrerReleve(db, releve);
-        const nouvelles = enregistrerATrier(db, releve.reponses, Object.keys(releve.jours).sort().pop());
+        const nouvelles = enregistrerATrier(db, releve.reponses, Object.keys(releve.jours).sort().pop(), undefined, releve.mesReponses);
         return send(res, 200, { ok: true, ecrits, reponses_a_trier: nouvelles });
       }
       // Pas d'OAuth : la connexion se fait par une clé dans l'en-tête. On répond

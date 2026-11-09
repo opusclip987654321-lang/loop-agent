@@ -1,13 +1,15 @@
 #!/usr/bin/env python3
 """Crée dans n8n (serveur Nūr) de quoi savoir à quels restaurants Walid a répondu (09/11/2026).
 
-- un tableau « np_mes_reponses » : seulement l'adresse du destinataire et la date d'envoi ;
+- un tableau « np_mes_reponses » : adresse du destinataire, date d'envoi, objet et texte écrit par
+  Walid (coupé avant la citation du mail auquel il répond ; décision de Walid du 09/11) ;
 - une automatisation « Nour Meet 5 - Mes réponses envoyées », ÉTEINTE à la création, qui lit le
   dossier « Envoyés » (Sent) de contact@nourmeet.com avec le même accès IMAP que Nour Meet 4,
-  et ne garde jamais le texte des mails.
+  et ne garde que ce que Walid a écrit (pas la citation en dessous).
 Walid l'allume ensuite lui-même dans n8n (bouton Publish / Active).
 Le relevé horaire (scripts/nour-meet-releve.py) lit ce tableau : une réponse de restaurant suivie
-d'un mail de Walid à la même adresse est « répondue », et Loop Agent ferme la demande tout seul.
+d'un mail de Walid à la même adresse est « répondue », et Loop Agent ferme la demande tout seul ;
+seuls les mails envoyés à des restaurants prospectés partent vers Loop Agent (numéros et adresses masqués).
 
     python3 n8n-mes-reponses.py            # crée le tableau et l'automatisation (éteinte)
     python3 n8n-mes-reponses.py --dossier "INBOX.Sent"   # autre nom de dossier si « Sent » échoue
@@ -46,7 +48,7 @@ tables = {t["name"]: t["id"] for t in api("/api/v1/data-tables?limit=100").get("
 if "np_mes_reponses" in tables:
     print("Tableau np_mes_reponses : déjà là.")
 else:
-    api("/api/v1/data-tables", {"name": "np_mes_reponses", "columns": [{"name": "destinataire", "type": "string"}, {"name": "envoye", "type": "string"}]}, "POST")
+    api("/api/v1/data-tables", {"name": "np_mes_reponses", "columns": [{"name": "destinataire", "type": "string"}, {"name": "envoye", "type": "string"}, {"name": "objet", "type": "string"}, {"name": "texte", "type": "string"}]}, "POST")
     print("Tableau np_mes_reponses : créé.")
 
 flux = api("/api/v1/workflows?limit=200").get("data") or []
@@ -59,13 +61,15 @@ for w in flux:
 if not imap:
     sys.exit("Accès IMAP de Nour Meet 4 introuvable : rien n'est créé.")
 
-CODE = r"""// Mes réponses (Walid) : seulement le destinataire et la date, jamais le texte.
+CODE = r"""// Mes réponses (Walid) : destinataire, date, objet et ce que Walid a écrit (sans la citation).
 const out = [];
 for (const { json: m } of $input.all()) {
   const to = String(m.to || '') + ',' + String(m.cc || '');
   const adrs = [...new Set((to.match(/[\w.+-]+@[\w-]+(?:\.[\w-]+)+/g) || []).map((a) => a.toLowerCase()))];
   const d = m.date ? new Date(m.date) : new Date();
-  for (const a of adrs) if (a !== 'contact@nourmeet.com') out.push({ json: { destinataire: a, envoye: (isNaN(d) ? new Date() : d).toISOString() } });
+  const corps = String(m.textPlain || m.text || '').split(/\n\s*(?:>|Le .{0,160}a écrit|-{2,}\s*Message d'origine|De ?:|From ?:)/)[0].trim().slice(0, 1500);
+  const objet = String(m.subject || '').slice(0, 200);
+  for (const a of adrs) if (a !== 'contact@nourmeet.com') out.push({ json: { destinataire: a, envoye: (isNaN(d) ? new Date() : d).toISOString(), objet, texte: corps } });
 }
 return out;"""
 

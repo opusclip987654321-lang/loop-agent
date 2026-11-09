@@ -11,7 +11,7 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { createHash, timingSafeEqual } from 'node:crypto';
-import { nettoyerReponses } from './reponses-nour.js';
+import { nettoyerReponses, nettoyerMesReponses } from './reponses-nour.js';
 
 export const ROUTE = '/releve/nour-meet';
 const SOURCE = 'releve-n8n';
@@ -58,7 +58,7 @@ export function nettoyer(body) {
   const g = body.glissant7 || {};
   const glissant7 = { envoyes: n(g.envoyes), ouverts: n(g.ouverts) };
   const r = body.restaurants && typeof body.restaurants === 'object' ? { total: n(body.restaurants.total), abonnes: n(body.restaurants.abonnes) } : null;
-  return { jours, glissant7, restaurants: r, reponses: nettoyerReponses(body.reponses) };
+  return { jours, glissant7, restaurants: r, reponses: nettoyerReponses(body.reponses), mesReponses: nettoyerMesReponses(body.mes_reponses) };
 }
 
 // Applique le relevé au document du projet (fonction pure, testée seule).

@@ -56,7 +56,21 @@ export function nettoyerReponses(list) {
   return out;
 }
 
-const vide = () => ({ aTrier: {}, triees: {} });
+// Ce que Walid a écrit aux restaurants (Nour Meet 5, décision de Walid du 09/11) : gardé pour
+// que l'agent suive chaque discussion. Masqué, borné.
+export function nettoyerMesReponses(list) {
+  if (!Array.isArray(list)) return [];
+  const out = [];
+  for (const r of list.slice(0, 200)) {
+    if (!r || !CLE.test(String(r.cle)) || !JOUR.test(String(r.jour))) continue;
+    const texte = str(r.texte, 1500);
+    if (!texte) continue;
+    out.push({ cle: r.cle, jour: r.jour, nom: str(r.nom, 80), objet: str(r.objet, 150), texte });
+  }
+  return out;
+}
+
+const vide = () => ({ aTrier: {}, triees: {}, envoyes: {} });
 
 // Ajoute les réponses pas encore connues ; oublie les textes non triés de plus d'un an.
 export function ajouterATrier(etat, reponses, today) {
@@ -84,15 +98,20 @@ export function ajouterATrier(etat, reponses, today) {
   return n;
 }
 
-export function enregistrerATrier(db, reponses, today, nowIso = new Date().toISOString()) {
-  if (!reponses.length) return 0;
+export function enregistrerATrier(db, reponses, today, nowIso = new Date().toISOString(), mesReponses = []) {
+  if (!reponses.length && !mesReponses.length) return 0;
   for (let i = 0; i < 5; i++) {
     const cur = db.getDoc(KEY);
     const etat = cur ? JSON.parse(cur.value) : vide();
-    const n = ajouterATrier(etat, reponses, today);
+    let n = ajouterATrier(etat, reponses, today);
+    etat.envoyes = etat.envoyes || {};
+    let m = 0;
+    for (const r of mesReponses) if (!etat.envoyes[r.cle]) (etat.envoyes[r.cle] = r), m++;
+    const garder = Object.values(etat.envoyes).sort((a, b) => (a.jour < b.jour ? 1 : -1)).slice(0, 300);
+    etat.envoyes = Object.fromEntries(garder.map((r) => [r.cle, r]));
     const repondues = etat.dernieresRepondues || [];
     delete etat.dernieresRepondues;
-    if (!n && cur) return 0;
+    if (!n && !m && cur) return 0;
     if (db.putDoc(KEY, JSON.stringify(etat), cur ? cur.version : 0, 'agent:releve-n8n').ok) {
       if (repondues.length) fermerDemandesRepondues(db, repondues, nowIso);
       return n;
@@ -162,7 +181,20 @@ export function resumePourAgent(etat) {
   const types = {};
   for (const r of Object.values(etat.triees || {})) types[r.type] = (types[r.type] || 0) + 1;
   const a = Object.keys(etat.aTrier || {}).length;
+  // Les discussions par restaurant : ce qu'il a répondu (résumé) et ce que Walid lui a écrit.
+  const fils = {};
+  for (const r of Object.values(etat.triees || {})) if (r.nom) (fils[r.nom] = fils[r.nom] || []).push({ jour: r.jour, de: 'restaurant', type: r.type, resume: r.resume });
+  for (const r of Object.values(etat.envoyes || {})) if (r.nom) (fils[r.nom] = fils[r.nom] || []).push({ jour: r.jour, de: 'walid', objet: r.objet, texte: r.texte });
+  const discussions = Object.entries(fils)
+    .filter(([, l]) => l.some((x) => x.de === 'walid') || l.some((x) => POSITIFS.has(x.type)))
+    .map(([restaurant, l]) => ({ restaurant, echanges: l.sort((x, y) => (x.jour < y.jour ? -1 : x.jour > y.jour ? 1 : x.de === 'restaurant' ? -1 : 1)) }))
+    .sort((x, y) => (x.echanges.at(-1).jour < y.echanges.at(-1).jour ? 1 : -1))
+    .slice(0, 15);
   return {
+    discussions,
+    consigne_discussions: discussions.length
+      ? 'Discussions avec les restaurants (réponses du restaurant résumées, mails de Walid). Suis-les : si un restaurant intéressé n’a plus de nouvelles depuis plusieurs jours, ou si Walid a promis quelque chose, propose une relance ou une action (demander_a_walid avec le brouillon en pièce texte). Ne réécris jamais à un restaurant toi-même.'
+      : undefined,
     a_trier: a,
     consigne: a ? 'Des réponses de restaurants attendent : appelle reponses_a_trier, classe-les, puis trier_reponses.' : undefined,
     triees_par_type: types,

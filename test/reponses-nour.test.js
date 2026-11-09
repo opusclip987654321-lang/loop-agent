@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { openDb } from '../server/db.js';
 import { createAgentTools } from '../server/agent-tools.js';
-import { masquer, nettoyerReponses, enregistrerATrier } from '../server/reponses-nour.js';
+import { masquer, nettoyerReponses, nettoyerMesReponses, enregistrerATrier } from '../server/reponses-nour.js';
 import { nettoyer } from '../server/releve-nour.js';
 import { defaultProjectDoc } from '../server/defaults.js';
 import { PROJECTS } from '../server/projects.js';
@@ -67,6 +67,11 @@ test('tri : un intéressé devient une demande à Walid, le texte est effacé, l
     enregistrerATrier(db, nettoyerReponses([{ cle: cle4, jour: today, nom: 'Déjà Vu', texte: 'Oui !', repondu_le: today }]), today);
     await tools.trier_reponses.handler({ projet: 'nourmeet', reponses: [{ cle: cle4, type: 'INTERESSE', resume: 'Oui.' }] });
     assert.ok(!JSON.stringify(JSON.parse(db.getDoc('project:nourmeet').value).tasks).includes('Déjà Vu'));
+    // Ce que Walid écrit au restaurant apparaît dans la discussion, masqué.
+    enregistrerATrier(db, [], today, undefined, nettoyerMesReponses([{ cle: '9'.repeat(16), jour: today, nom: 'Le Bistrot', objet: 'Re: soirées', texte: 'Bonjour, je vous appelle demain au 0611223344.' }]));
+    const fil = (await tools.lire_projet.handler({ projet: 'nourmeet' })).reponses_restaurants.discussions.find((x) => x.restaurant === 'Le Bistrot');
+    assert.deepEqual(fil.echanges.map((x) => x.de), ['restaurant', 'walid']);
+    assert.match(fil.echanges[1].texte, /\[téléphone masqué\]/);
     // Un second tri des mêmes clés ne fait rien (pas de doublon de demande).
     assert.match(await tools.trier_reponses.handler({ projet: 'nourmeet', reponses: [{ cle: cle1, type: 'INTERESSE', resume: 'x' }] }), /Aucune réponse/);
   } finally {

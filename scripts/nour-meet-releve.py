@@ -153,7 +153,8 @@ def masquer(t):
 par_email = {str(p.get("email") or "").lower(): p for p in prospects if p.get("email")}
 # Mes réponses (Walid), lues dans np_mes_reponses (Nour Meet 5, dossier Envoyés) : adresse et date seulement.
 mes_envois = {}
-for m in tableau("np_mes_reponses", ids):
+mes_lignes = tableau("np_mes_reponses", ids)
+for m in mes_lignes:
     a = str(m.get("destinataire") or "").lower()
     if a and m.get("envoye"):
         mes_envois.setdefault(a, []).append(str(m["envoye"]))
@@ -179,6 +180,28 @@ for r in reponses:
         "repondu_le": jour_de(apres[0]) if apres else None,
     })
 corps["reponses"] = sorted(a_trier, key=lambda x: x["jour"])[-200:]
+
+# Ce que Walid a écrit aux restaurants (décision de Walid du 09/11) : seulement les mails envoyés
+# à un restaurant prospecté ou à quelqu'un qui a répondu à la prospection, numéros et adresses masqués.
+expediteurs = {str(r.get("email") or "").lower(): r for r in reponses if r.get("email")}
+mes_reponses = []
+for m in mes_lignes:
+    a = str(m.get("destinataire") or "").lower()
+    p = par_email.get(a)
+    if not p and a not in expediteurs:
+        continue
+    if not p:
+        objet_r = str(expediteurs[a].get("objet") or "")
+        p = next((x for x in noms_longs if objet_r and str(x.get("nom")).lower() in objet_r.lower()), None)
+    j = jour_de(m.get("envoye"))
+    if not j:
+        continue
+    mes_reponses.append({
+        "cle": hashlib.sha256(f"{a}|{m.get('envoye')}".encode()).hexdigest()[:16], "jour": j,
+        "nom": str(p.get("nom"))[:80] if p and p.get("nom") else None,
+        "objet": masquer(str(m.get("objet") or ""))[:150], "texte": masquer(str(m.get("texte") or "")).strip()[:1500],
+    })
+corps["mes_reponses"] = sorted(mes_reponses, key=lambda x: x["jour"])[-200:]
 
 # Restaurants inscrits et abonnés, lus dans la base de l'application Nūr Meet (même serveur),
 # en LECTURE SEULE : comptes « ORGANIZER » hors démo, abonnements actifs. Seulement des nombres.
@@ -210,7 +233,7 @@ except Exception as e:
     print("base Nūr Meet illisible :", str(e)[:200])
 
 if ESSAI:
-    print(json.dumps({**corps, "reponses": f"{len(corps.get('reponses', []))} réponse(s) à trier (textes non affichés)"}, ensure_ascii=False, indent=1))
+    print(json.dumps({**corps, "reponses": f"{len(corps.get('reponses', []))} réponse(s) à trier (textes non affichés)", "mes_reponses": f"{len(corps.get('mes_reponses', []))} mail(s) de Walid (textes non affichés)"}, ensure_ascii=False, indent=1))
     sys.exit(0)
 
 jeton = (ICI / "jeton").read_text().strip()
