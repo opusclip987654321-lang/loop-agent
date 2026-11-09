@@ -121,6 +121,10 @@ Avant l'arrêt du cerveau central, l'historique tenu dans Notion « Loops des pr
 
 Accès donné par Walid le 09/11/2026 : le compte de service Google `loop-agent@loop-agent-514221.iam.gserviceaccount.com` (projet Google Cloud « loop agent », API Search Console activée) est utilisateur « Restreint » des sites dans Search Console. Toutes les 6 heures (`server/releve-search-console.js`), Loop Agent lit en lecture seule les clics et affichages Google par jour (30 jours, réécrits car Google a 2 à 3 jours de retard) → indicateurs « Visites venues de Google » ou « Clics depuis Google » et « Affichages dans Google » ; plus les 15 requêtes et 10 pages principales sur 28 jours → `lire_projet` → `search_console`. La demande d'accès Search Console de l'agent se ferme seule. Clé dans `/data/search-console.json` (droits 600), rangée depuis le Mac sans jamais l'afficher ; `node scripts/search-console.js essai | retirer`.
 
+## Étapes des idées (cycle)
+
+Ordre décidé par Walid le 09/11/2026 : Planification → Priorités → Exécution → Vérification → Révision → Mémoire (onglets de la page dans cet ordre ; remarques de page rangées par nom). Les agents oubliaient de faire avancer leurs idées (190 sur 277 en Planification) : Loop Agent les fait avancer seul (`server/stades.js`) — validée par Walid → Priorités, tour de l'agent → Exécution, résultat mesuré → Vérification, réponse de Walid après la vérification → Révision, leçon notée → Mémoire ; jamais à reculons, l'agent peut toujours choisir un stade. Chaque carte d'action montre où en sont ses idées. Garde-fou : `lire_projet` → `a_faire_d_abord` liste une idée jugée depuis 3 jours sans leçon, ou un résultat mesuré sans compte rendu ; l'agent le rattrape avant son travail du jour (règle 16 du connecteur).
+
 ## Données
 
 Volume Docker `loop-agent_loop_agent_data` : `loop-agent.sqlite` (tout) et `files/` (factures).

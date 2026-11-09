@@ -25,7 +25,7 @@ import '../public/periodes.js';
 const P = globalThis.LAPeriodes;
 const KPI_AGG = ['somme', 'dernier'];
 
-const STAGES = ['Planification', 'Exécution', 'Vérification', 'Mémoire', 'Priorités', 'Révision'];
+import { STAGES, synchroniser, apresTour, apresResultat, apresLecon, resumeStades, aFaireDAbord } from './stades.js';
 const LESSON_STATES = ['à tester', 'confirmée', 'invalidée'];
 const MEMORY_KINDS = ['Réussites', 'Échecs', 'Hypothèses', 'Décisions', 'Règles d’or', 'Hooks efficaces', 'Hooks rejetés', 'Styles visuels / Voix'];
 const TYPES = ['Boucle', 'Ponctuelle'];
@@ -378,6 +378,11 @@ export function createAgentTools({ db, dataDir, onAgentWrite = () => {}, onToolD
                 }
               : undefined,
             arretee: t.stopped ? { motif: t.stopReason || '' } : undefined,
+            a_faire_d_abord: (() => {
+              const x = t.proposalStatus === 'pending' || t.proposalStatus === 'rejected' || t.stopped ? [] : aFaireDAbord(t);
+              return x.length ? x : undefined;
+            })(),
+            etapes_des_idees: resumeStades(t),
             idees: t.ideas.map((i, index) => ({
               index,
               texte: i.text,
@@ -500,6 +505,10 @@ export function createAgentTools({ db, dataDir, onAgentWrite = () => {}, onToolD
             if (u.erreur && idea.errorState && !idea.errorContext) throw new ToolError('Une idée bloquée doit expliquer le contexte (champ « contexte ») : ce que tu voulais faire, pourquoi, et ce qui bloque, en mots simples pour Walid.');
             if (!idea.errorState) idea.errorContext = undefined;
           }
+          // Étapes des idées tenues par Loop Agent (Walid, 09/11/2026) : sans stade choisi, l'idée travaillée passe en Exécution.
+          synchroniser(t, today());
+          const idees = args.idees || [];
+          if (!idees.length || idees.some((u) => !u.stade)) apresTour(t, idees.filter((u) => !u.stade).map((u) => u.index), today());
           const note = auto.length ? ` ${auto.length} demande(s) à Walid enregistrée(s) d’après ton texte : elles restent ouvertes jusqu’à ce qu’il les ferme.` : '';
           if (firstRun && !t.done) {
             t.firstRunPending = true;
@@ -676,6 +685,7 @@ export function createAgentTools({ db, dataDir, onAgentWrite = () => {}, onToolD
           }
           (t.results = t.results || []).unshift(r);
           t.results = t.results.slice(0, 200);
+          if (!unavailable) apresResultat(t, today());
           return { message: 'Résultat enregistré.', avancement: objectiveView(t) };
         });
       },
@@ -823,6 +833,7 @@ export function createAgentTools({ db, dataDir, onAgentWrite = () => {}, onToolD
             state: oneOf(args.statut, 'statut', LESSON_STATES, 'à tester'),
           };
           (doc.memories = doc.memories || []).push(m);
+          apresLecon(findTask(doc, args.action), today());
           return { id: m.id, message: 'Leçon ajoutée à la mémoire.' };
         });
       },
@@ -1313,4 +1324,5 @@ export const CONNECTOR_INSTRUCTIONS = `Loop Agent est le tableau de bord des bou
 13. Questions de Walid : au DÉBUT de chaque tour, regarde dans lire_projet les demandes qui ont « question_de_walid_a_repondre » et réponds à chacune avec repondre_a_walid, clairement et simplement, avec tes arguments et ta recommandation. Mets bloque_sans_walid à true seulement si tu ne peux plus avancer sans une action de sa part (sinon pas de Telegram). La demande reste ouverte : c'est Walid qui la ferme quand il a décidé.
 14. Contexte : tout ce que Walid lit (demandes, blocages, comptes rendus) dit en mots simples ce que tu voulais faire, pourquoi c'est utile au projet, et ce qui se passe. Un blocage s'écrit avec ecrire_tour → idees[].erreur ET idees[].contexte. Une idée « abandonnee_par_walid » ne se refait pas ; « blocage_leve_par_walid » veut dire : réessaie.
 15. Nūr Meet : si lire_projet → reponses_restaurants → a_trier est supérieur à 0, appelle reponses_a_trier, classe chaque réponse selon la consigne, puis trier_reponses. Les intéressés deviennent seuls des demandes à Walid : ne les redemande pas.
+16. Étapes des idées : Loop Agent les fait avancer seul (Planification → Priorités → Exécution → Vérification → Révision → Mémoire) d’après tes tours, résultats et leçons. Si une action a « a_faire_d_abord », fais-le AVANT le travail du jour : c’est ce qui a été appris ou fait sans être noté.
 Jamais de mot de passe, de clé ni de jeton dans ce que tu écris.`;

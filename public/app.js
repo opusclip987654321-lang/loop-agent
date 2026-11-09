@@ -1,5 +1,6 @@
 // Interface de Loop Agent, issue de atelier-maquette.html (transformation : tools/transform-maquette.mjs).
-const pages = ['Planification', 'Exécution', 'Vérification', 'Mémoire', 'Priorités', 'Révision'],
+// Ordre du cycle décidé par Walid le 09/11/2026 (avant : Exécution, Vérification, Mémoire, Priorités, Révision).
+const pages = ['Planification', 'Priorités', 'Exécution', 'Vérification', 'Révision', 'Mémoire'],
   slugs = ['planification', 'execution', 'verification', 'memoire', 'priorites', 'revision'];
 const moneyPage = { name: 'Argent', slug: 'argent' },
   categories = ['Site web', 'Application mobile', 'Réseaux sociaux', 'SEO', 'Design', 'Prospection', 'Autre'],
@@ -313,9 +314,26 @@ document.getElementById('dialog').addEventListener('click', (e) => {
 function head(title, desc, action = '') {
   return `<div class="heading"><div><div class="tiny" style="margin-bottom:8px">${esc(projectDef.name.toUpperCase())} / ÉTAPE 0${page + 1}</div><h1>${title}</h1><p class="intro">${desc}</p></div>${action}</div>`;
 }
+// Où en sont les idées de l'action dans le cycle (Loop Agent les fait avancer seul depuis le 09/11/2026).
+function etapesIdees(t) {
+  const c = {};
+  for (const i of t.ideas || []) if (i && typeof i === 'object' && !i.dropped && i.approvalStatus !== 'pending' && i.approvalStatus !== 'rejected') c[i.latestStage || 'Planification'] = (c[i.latestStage || 'Planification'] || 0) + 1;
+  const l = pages.filter((p) => c[p]).map((p) => `<span class="badge">${esc(p)} · ${c[p]}</span>`);
+  return l.length ? `<div class="toolbar" style="margin:4px 0 8px"><span class="tiny">IDÉES</span>${l.join('')}</div>` : '';
+}
+// Les remarques de chaque page étaient rangées par numéro de page ; l'ordre a changé : on les range par nom.
+function notesParNom() {
+  const anciennes = ['Planification', 'Exécution', 'Vérification', 'Mémoire', 'Priorités', 'Révision'];
+  data.notes = data.notes || {};
+  for (const k of Object.keys(data.notes)) if (/^\d$/.test(k)) {
+    const n = anciennes[k];
+    if (n && !data.notes[n]) data.notes[n] = data.notes[k];
+    delete data.notes[k];
+  }
+}
 function cardTask(t) {
   let proposal = stopBanner(t) + proposalCard(t);
-  return `<article class="card ${taskColor(t) === 'rouge' ? 'cred' : taskColor(t) === 'gris' ? 'cgrey' : 'cgreen'}"><div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap"><span class="tiny">${colorDot(taskColor(t))}${t.origin === 'Walid' ? 'Ajouté par Walid' : 'Proposé par ' + esc(t.origin)}${raisonsRouge(t)}</span><div class="toolbar" style="margin:0">${pill(t.status)}<span class="badge">${t.type === 'Boucle' ? '🔁 Boucle' : '● Ponctuelle'}</span>${autonomyBadge(t)}<span class="badge gold">${esc(t.category || 'À classer')}</span></div></div><h3>${esc(t.title)}</h3><p class="muted">${esc(t.goal)}</p>${t.targetFollowers ? `<p><strong>Cible :</strong> ${Number(t.targetFollowers).toLocaleString('fr-FR')} abonnés</p>` : ''}${proposal}<div class="meta"><div><span>Responsable</span>${esc(t.owner)}</div><div><span>Révision prévue</span>${esc(t.reviewCadence || (t.type === 'Ponctuelle' || t.format ? 'Chaque jour' : 'Chaque lundi'))}</div></div><div class="actions">${btn('Ouvrir l’action ↗', "detail('TID')".replace('TID', t.id))}</div></article>`;
+  return `<article class="card ${taskColor(t) === 'rouge' ? 'cred' : taskColor(t) === 'gris' ? 'cgrey' : 'cgreen'}"><div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap"><span class="tiny">${colorDot(taskColor(t))}${t.origin === 'Walid' ? 'Ajouté par Walid' : 'Proposé par ' + esc(t.origin)}${raisonsRouge(t)}</span><div class="toolbar" style="margin:0">${pill(t.status)}<span class="badge">${t.type === 'Boucle' ? '🔁 Boucle' : '● Ponctuelle'}</span>${autonomyBadge(t)}<span class="badge gold">${esc(t.category || 'À classer')}</span></div></div><h3>${esc(t.title)}</h3><p class="muted">${esc(t.goal)}</p>${etapesIdees(t)}${t.targetFollowers ? `<p><strong>Cible :</strong> ${Number(t.targetFollowers).toLocaleString('fr-FR')} abonnés</p>` : ''}${proposal}<div class="meta"><div><span>Responsable</span>${esc(t.owner)}</div><div><span>Révision prévue</span>${esc(t.reviewCadence || (t.type === 'Ponctuelle' || t.format ? 'Chaque jour' : 'Chaque lundi'))}</div></div><div class="actions">${btn('Ouvrir l’action ↗', "detail('TID')".replace('TID', t.id))}</div></article>`;
 }
 function setTaskProposal(id, approved) {
   let t = task(id);
@@ -650,7 +668,7 @@ function detail(id, showTools = false) {
       : '';
   modal(
     t.title,
-    `<div class="toolbar">${pill(t.status)}<span class="badge gold">${esc(t.category)}</span><span class="badge">${esc(t.format || t.type)}</span></div><div class="task-detail-layout"><div class="task-main"><p>${esc(t.goal)}</p><div class="meta"><div><span>Responsable</span>${esc(t.owner)}</div><div><span>Révision prévue</span>${esc(t.reviewCadence || (t.type === 'Ponctuelle' || t.format ? 'Chaque jour' : 'Chaque lundi'))}</div><div><span>Critère de réussite</span>${esc(t.metric)}</div><div><span>Plan d’exécution</span>${esc(executionPlan(t.owner))}</div></div></div></div>${youtube}<div class="heading" style="margin:20px 0 8px"><h3>Idées de cette action</h3><div class="actions" style="margin:0">${btn('+ Ajouter mon idée', "newTaskIdea('TID','Walid')".replace('TID', id))}</div></div><p class="note">Les idées de Walid sont approuvées directement. Toute idée ajoutée par l’IA doit être validée ou refusée avec les boutons vert et rouge. Une idée validée peut partir en exécution quand l’IA le décide. Ces idées sont indépendantes. L’agent peut en retenir certaines, en écarter d’autres et les classer par priorité ; aucune idée ne dépend de la validation d’une précédente. Chaque carte affiche le stade le plus récemment atteint. Si une idée repart en boucle de Révision vers Exécution, son stade affiché redevient Exécution ; son parcours précédent reste visible.</p><div id="taskideas-${id}">${ideaList}</div><label>État de l’action</label><select id="taskstatus">${['À planifier', ...queueStates, 'À valider', 'Terminée', 'Bloquée'].map((s) => `<option ${s === t.status ? 'selected' : ''}>${esc(s)}</option>`).join('')}</select><label>Ta description ou tes remarques pour l’agent</label><textarea id="taskfeedback" placeholder="Explique ce que tu penses de l’action…">${esc(t.feedback || '')}</textarea><div class="actions">${btn('Enregistrer mon avis', `saveFeedback('${id}')`, 'primary')}${btn('Enregistrer le statut', `updateTask('${id}')`)}${btn('Voir l’exécution', 'closeDialog();go(1)')}</div><p class="note">Ton avis reste dans ce navigateur ; il n’est pas transmis à un agent réel.</p>`,
+    `<div class="toolbar">${pill(t.status)}<span class="badge gold">${esc(t.category)}</span><span class="badge">${esc(t.format || t.type)}</span></div><div class="task-detail-layout"><div class="task-main"><p>${esc(t.goal)}</p><div class="meta"><div><span>Responsable</span>${esc(t.owner)}</div><div><span>Révision prévue</span>${esc(t.reviewCadence || (t.type === 'Ponctuelle' || t.format ? 'Chaque jour' : 'Chaque lundi'))}</div><div><span>Critère de réussite</span>${esc(t.metric)}</div><div><span>Plan d’exécution</span>${esc(executionPlan(t.owner))}</div></div></div></div>${youtube}<div class="heading" style="margin:20px 0 8px"><h3>Idées de cette action</h3><div class="actions" style="margin:0">${btn('+ Ajouter mon idée', "newTaskIdea('TID','Walid')".replace('TID', id))}</div></div><p class="note">Les idées de Walid sont approuvées directement. Toute idée ajoutée par l’IA doit être validée ou refusée avec les boutons vert et rouge. Une idée validée peut partir en exécution quand l’IA le décide. Ces idées sont indépendantes. L’agent peut en retenir certaines, en écarter d’autres et les classer par priorité ; aucune idée ne dépend de la validation d’une précédente. Chaque carte affiche le stade le plus récemment atteint. Si une idée repart en boucle de Révision vers Exécution, son stade affiché redevient Exécution ; son parcours précédent reste visible.</p><div id="taskideas-${id}">${ideaList}</div><label>État de l’action</label><select id="taskstatus">${['À planifier', ...queueStates, 'À valider', 'Terminée', 'Bloquée'].map((s) => `<option ${s === t.status ? 'selected' : ''}>${esc(s)}</option>`).join('')}</select><label>Ta description ou tes remarques pour l’agent</label><textarea id="taskfeedback" placeholder="Explique ce que tu penses de l’action…">${esc(t.feedback || '')}</textarea><div class="actions">${btn('Enregistrer mon avis', `saveFeedback('${id}')`, 'primary')}${btn('Enregistrer le statut', `updateTask('${id}')`)}${btn('Voir l’exécution', 'closeDialog();go(2)')}</div><p class="note">Ton avis reste dans ce navigateur ; il n’est pas transmis à un agent réel.</p>`,
   );
 }
 function setQueue(id, s) {
@@ -1203,7 +1221,8 @@ function resetPrompt() {
   notify('Consignes de démonstration rétablies.');
 }
 function note(v) {
-  data.notes[page] = v;
+  notesParNom();
+  data.notes[pages[page]] = v;
   save();
 }
 
@@ -1900,8 +1919,8 @@ function render() {
   }
   document.getElementById('activeProject').textContent = projectDef.name;
   main.innerHTML =
-    [planning, execution, verification, memory, priorities, revision][page]() +
-    `<details style="margin-top:32px;border-top:1px solid var(--line);padding-top:18px"><summary style="cursor:pointer;color:var(--gold)">Une remarque sur cette page ?</summary><p class="note">Tes remarques restent liées à cette étape.</p><textarea placeholder="Il manque… / Je voudrais voir…" oninput="note(this.value)">${esc(data.notes[page] || '')}</textarea><div class="actions">${btn('Télécharger mes remarques', 'downloadNotes()')}</div></details><div class="page-bottom">${page ? btn('← ' + pages[page - 1], `go(${page - 1})`) : '<span></span>'}${page < 5 ? btn(pages[page + 1] + ' →', `go(${page + 1})`) : btn('Retour à la planification ↻', 'go(0)')}</div>`;
+    [planning, priorities, execution, verification, revision, memory][page]() +
+    `<details style="margin-top:32px;border-top:1px solid var(--line);padding-top:18px"><summary style="cursor:pointer;color:var(--gold)">Une remarque sur cette page ?</summary><p class="note">Tes remarques restent liées à cette étape.</p><textarea placeholder="Il manque… / Je voudrais voir…" oninput="note(this.value)">${esc((notesParNom(), data.notes[pages[page]]) || '')}</textarea><div class="actions">${btn('Télécharger mes remarques', 'downloadNotes()')}</div></details><div class="page-bottom">${page ? btn('← ' + pages[page - 1], `go(${page - 1})`) : '<span></span>'}${page < 5 ? btn(pages[page + 1] + ' →', `go(${page + 1})`) : btn('Retour à la planification ↻', 'go(0)')}</div>`;
 }
 function setCategory(f) {
   categoryFilter = f;
@@ -1912,7 +1931,8 @@ function setSource(f) {
   render();
 }
 function downloadNotes() {
-  let content = pages.map((p, i) => `## ${p}\n${data.notes[i] || ''}`).join('\n\n');
+  notesParNom();
+  let content = pages.map((p) => `## ${p}\n${data.notes[p] || ''}`).join('\n\n');
   download('remarques-loop-agent.md', content, 'text/markdown');
 }
 function download(name, content, type) {
