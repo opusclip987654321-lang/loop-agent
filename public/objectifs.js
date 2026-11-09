@@ -408,7 +408,7 @@ function demandesStrip(t) {
   const rows = ds
     .map(
       (d) =>
-        `<div style="margin-top:10px"><strong>${esc(d.texte)}</strong>${d.pourquoi ? `<p class="tiny" style="margin:4px 0 0">${esc(d.pourquoi)}</p>` : ''}${piecesHtml(d)}<p class="tiny" style="margin:4px 0 6px">Demandé le ${esc(String(d.at).slice(0, 10).split('-').reverse().join('/'))}${d.source === 'compte rendu' ? ' · repéré dans un compte rendu de l’agent' : ''}</p>${echangesHtml(d)}<input id="dem-${d.id}" placeholder="Ta réponse, ou ta question pour l’agent" style="width:100%;margin-bottom:6px"><div class="actions" style="margin-top:0">${btn('C’est fait', `fermerDemande('${t.id}','${d.id}','faite')`, 'good')}${btn('Poser une question', `questionDemande('${t.id}','${d.id}')`)}${btn('Plus besoin', `fermerDemande('${t.id}','${d.id}','abandonnee')`)}</div></div>`,
+        `<div style="margin-top:10px"><strong>${esc(d.texte)}</strong>${d.pourquoi ? `<p class="tiny" style="margin:4px 0 0">${esc(d.pourquoi)}</p>` : ''}${piecesHtml(d)}<p class="tiny" style="margin:4px 0 6px">Demandé le ${esc(String(d.at).slice(0, 10).split('-').reverse().join('/'))}${d.source === 'compte rendu' ? ' · repéré dans un compte rendu de l’agent' : ''}</p>${echangesHtml(d)}<input id="dem-${d.id}" placeholder="Ta réponse, ou ta question pour l’agent" style="width:100%;margin-bottom:6px"><div class="actions" style="margin-top:0">${btn(d.cleReponse ? 'Je l’ai envoyé' : 'C’est fait', `fermerDemande('${t.id}','${d.id}','faite')`, 'good')}${btn('Poser une question', `questionDemande('${t.id}','${d.id}')`)}${btn('Plus besoin', `fermerDemande('${t.id}','${d.id}','abandonnee')`)}</div></div>`,
     )
     .join('');
   const accRows = acc
