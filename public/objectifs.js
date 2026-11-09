@@ -363,15 +363,43 @@ function piecesHtml(d) {
         const src = '/api/files/' + encodeURIComponent(p.fichier);
         return `<a href="${src}" target="_blank" rel="noopener" style="display:block;text-decoration:none;color:inherit;max-width:240px"><img src="${src}" alt="${esc(p.titre)}" style="display:block;max-width:240px;max-height:300px;border-radius:8px;border:1px solid var(--line)"><span class="tiny">${esc(p.titre)} · cliquer pour agrandir</span></a>`;
       }
+      if (p.texte) return `<details style="width:100%;border:1px solid var(--line);border-radius:8px;padding:8px 10px"><summary style="cursor:pointer"><strong>📄 ${esc(p.titre)}</strong> · cliquer pour lire</summary><div style="white-space:pre-line;margin-top:8px">${esc(p.texte)}</div></details>`;
       const href = p.fichier ? '/api/files/' + encodeURIComponent(p.fichier) : p.url;
       return `<a href="${esc(href)}" target="_blank" rel="noopener" class="badge">${esc(p.titre)} ↗</a>`;
     })
     .join('')}</div>`;
 }
+// Les idées bloquées : ce que l'agent voulait faire, pourquoi, et ce qui l'en empêche.
+function blocagesOuverts(t) {
+  return (t.ideas || []).map((i, idx) => ({ i, idx })).filter(({ i }) => i && typeof i === 'object' && i.errorState);
+}
+function blocagesHtml(t) {
+  return blocagesOuverts(t)
+    .map(
+      ({ i, idx }) =>
+        `<div style="margin-top:10px"><strong>🚧 L’agent est bloqué</strong><p style="margin:6px 0 2px"><span class="tiny">Ce qu’il voulait faire :</span><br>${esc(i.errorContext || i.text)}</p><p style="margin:6px 0 2px"><span class="tiny">Ce qui l’en empêche :</span><br>${esc(i.errorState)}</p>${i.errorContext ? '' : '<p class="tiny" style="margin:4px 0">L’agent n’a pas encore expliqué le contexte : il devra le faire à son prochain passage.</p>'}<div class="actions" style="margin-top:6px">${btn('C’est réglé, réessaie', `leverBlocage('${t.id}',${idx},false)`, 'good')}${btn('Laisse tomber cette idée', `leverBlocage('${t.id}',${idx},true)`)}</div></div>`,
+    )
+    .join('');
+}
+function leverBlocage(taskId, idx, abandon) {
+  const t = task(taskId);
+  const i = t && t.ideas && t.ideas[idx];
+  if (!i || typeof i !== 'object') return;
+  i.lastError = { texte: i.errorState, contexte: i.errorContext, le: new Date().toISOString() };
+  i.errorState = undefined;
+  i.errorContext = undefined;
+  i.unblockedAt = new Date().toISOString();
+  if (abandon) i.dropped = true;
+  save();
+  render();
+  if (document.getElementById('dialog').open) detail(taskId, true);
+  notify(abandon ? 'Idée abandonnée : l’agent ne la refera pas.' : 'Blocage levé : l’agent réessaiera à son prochain passage.');
+}
 function demandesStrip(t) {
   const ds = demandesOuvertes(t);
   const acc = accesOuverts(t);
-  const n = ds.length + acc.length;
+  const bl = blocagesOuverts(t);
+  const n = ds.length + acc.length + bl.length;
   if (!n) return '';
   const rows = ds
     .map(
@@ -385,7 +413,7 @@ function demandesStrip(t) {
         `<div style="margin-top:10px"><strong>Donner l’accès : ${esc(a.name)}</strong>${a.message ? `<p class="tiny" style="margin:4px 0 6px">${esc(a.message)}</p>` : ''}<div class="actions" style="margin-top:0">${btn('C’est branché', `fermerAcces('${t.id}',${idx},${ai},true)`, 'good')}${btn('Plus besoin', `fermerAcces('${t.id}',${idx},${ai},false)`)}</div></div>`,
     )
     .join('');
-  return `<section class="strip red" style="margin:12px 0"><strong>🙋 ${n > 1 ? n + ' choses attendent' : 'Une chose attend'} ton aide</strong>${rows}${accRows}</section>`;
+  return `<section class="strip red" style="margin:12px 0"><strong>🙋 ${n > 1 ? n + ' choses attendent' : 'Une chose attend'} ton aide</strong>${rows}${accRows}${blocagesHtml(t)}</section>`;
 }
 // La petite conversation sur une demande : tes questions et les réponses de l'agent.
 function echangesHtml(d) {

@@ -384,6 +384,9 @@ export function createAgentTools({ db, dataDir, onAgentWrite = () => {}, onToolD
               reponse_walid: i.walidReply || undefined,
               reponse_walid_le: (i.walidReply && i.walidReplyAt) || undefined,
               acces_manquants: (i.accessRequests || []).filter((a) => !a.connected).map((a) => a.name),
+              bloquee: i.errorState ? { ce_qui_bloque: i.errorState, contexte: i.errorContext || '(à expliquer : ce que tu voulais faire et pourquoi)' } : undefined,
+              blocage_leve_par_walid: i.unblockedAt && !i.errorState ? i.unblockedAt : undefined,
+              abandonnee_par_walid: i.dropped ? true : undefined,
             })),
             demandes_a_walid: (t.demandes || []).slice(0, 10).map((d) => ({ id: d.id, demande: d.texte, statut: d.statut, question_de_walid_a_repondre: d.statut === 'ouverte' && d.attenteAgent ? (d.echanges || []).filter((e) => e.de === 'walid').slice(-1)[0]?.texte : undefined, echanges: (d.echanges || []).slice(-6).map((e) => ({ de: e.de, texte: e.texte, le: e.at })), pieces: (d.pieces || []).map((p) => p.titre), depuis: d.at, fermee_le: d.fermeeLe || undefined, reponse_walid: d.reponse || undefined })),
             derniers_tours: (t.reviewHistory || []).slice(0, 3),
@@ -433,6 +436,7 @@ export function createAgentTools({ db, dataDir, onAgentWrite = () => {}, onToolD
                 stade: { type: 'string', enum: STAGES },
                 commentaire: { type: 'string' },
                 erreur: { type: 'string', description: 'Si l’idée est bloquée par une erreur : la décrire (l’idée passe au rouge). Chaîne vide pour lever l’erreur.' },
+                contexte: { type: 'string', description: 'OBLIGATOIRE avec erreur : en mots simples, ce que tu voulais faire, pourquoi c’est utile au projet, et ce qui t’en empêche (ex. « Je voulais regarder ce que les gens tapent sur Amazon pour choisir les mots-clés du livre ; je n’ai pas pu car le Chrome de Walid est déconnecté »).' },
               },
               required: ['index'],
             },
@@ -484,6 +488,9 @@ export function createAgentTools({ db, dataDir, onAgentWrite = () => {}, onToolD
             }
             if (u.commentaire !== undefined) idea.agentComment = text(u.commentaire, 'commentaire', { required: false });
             if (u.erreur !== undefined) idea.errorState = text(u.erreur, 'erreur', { required: false }) || undefined;
+            if (u.contexte !== undefined) idea.errorContext = text(u.contexte, 'contexte', { max: 800, required: false }) || undefined;
+            if (u.erreur && idea.errorState && !idea.errorContext) throw new ToolError('Une idée bloquée doit expliquer le contexte (champ « contexte ») : ce que tu voulais faire, pourquoi, et ce qui bloque, en mots simples pour Walid.');
+            if (!idea.errorState) idea.errorContext = undefined;
           }
           const note = auto.length ? ` ${auto.length} demande(s) à Walid enregistrée(s) d’après ton texte : elles restent ouvertes jusqu’à ce qu’il les ferme.` : '';
           if (firstRun && !t.done) {
@@ -850,8 +857,8 @@ export function createAgentTools({ db, dataDir, onAgentWrite = () => {}, onToolD
           demande_id: { type: 'string', description: 'Pour ajouter des pièces à une demande déjà ouverte (id dans lire_projet → demandes_a_walid).' },
           pieces: {
             type: 'array',
-            description: 'Ce que Walid doit voir pour décider : { titre, fichier } (identifiant rendu par le dépôt) ou { titre, url } (lien https).',
-            items: { type: 'object', properties: { titre: { type: 'string' }, fichier: { type: 'string' }, url: { type: 'string' } }, required: ['titre'] },
+            description: 'Ce que Walid doit voir pour décider : { titre, fichier } (identifiant rendu par le dépôt) ou { titre, url } (lien https), ou { titre, texte } (un texte à lire directement, ex. la fiche à relire).',
+            items: { type: 'object', properties: { titre: { type: 'string' }, fichier: { type: 'string' }, url: { type: 'string' }, texte: { type: 'string' } }, required: ['titre'] },
           },
         },
         required: ['projet', 'action'],
@@ -865,7 +872,8 @@ export function createAgentTools({ db, dataDir, onAgentWrite = () => {}, onToolD
             return { titre, fichier: f.id, type: f.mime };
           }
           if (p.url && /^https:\/\/\S+$/.test(String(p.url)) && String(p.url).length <= 600) return { titre, url: String(p.url) };
-          throw new ToolError(`pieces[${i}] : donne un « fichier » (déposé avec preparer_depot) ou une « url » en https.`);
+          if (typeof p.texte === 'string' && p.texte.trim()) return { titre, texte: text(p.texte, `pieces[${i}].texte`, { max: 20000 }) };
+          throw new ToolError(`pieces[${i}] : donne un « fichier » (déposé avec preparer_depot), une « url » en https, ou un « texte » à lire (ex. une fiche à relire).`);
         });
         return mutateProject(args.projet, agentName(args), (doc) => {
           const t = findTask(doc, args.action);
@@ -1144,4 +1152,5 @@ export const CONNECTOR_INSTRUCTIONS = `Loop Agent est le tableau de bord des bou
 11. Argent : quand tu connais une dépense réelle du projet (abonnement, recharge, API facturée), note-la avec enregistrer_depense et sa source ; un montant calculé se marque estimation:true. Le coût affiché d'une session Claude n'est pas une dépense. Tu n'engages jamais de dépense nouvelle sans l'accord de Walid.
 12. Quand Walid doit faire ou décider quelque chose (choisir, donner un accès, créer un compte, installer, envoyer) : demander_a_walid (ou signaler_acces pour un accès à un outil). La demande reste ouverte et l'action rouge jusqu'à ce que Walid la ferme. Joins-y ce qu'il doit regarder pour décider (images ou PDF déposés avec preparer_depot, ou liens) : il doit pouvoir décider sans chercher ailleurs. Une phrase « Pour Walid : … » écrite dans un compte rendu est rattrapée automatiquement, mais utilise l'outil : une chose par demande, en une phrase simple.
 13. Questions de Walid : au DÉBUT de chaque tour, regarde dans lire_projet les demandes qui ont « question_de_walid_a_repondre » et réponds à chacune avec repondre_a_walid, clairement et simplement, avec tes arguments et ta recommandation. La demande reste ouverte : c'est Walid qui la ferme quand il a décidé.
+14. Contexte : tout ce que Walid lit (demandes, blocages, comptes rendus) dit en mots simples ce que tu voulais faire, pourquoi c'est utile au projet, et ce qui se passe. Un blocage s'écrit avec ecrire_tour → idees[].erreur ET idees[].contexte. Une idée « abandonnee_par_walid » ne se refait pas ; « blocage_leve_par_walid » veut dire : réessaie.
 Jamais de mot de passe, de clé ni de jeton dans ce que tu écris.`;

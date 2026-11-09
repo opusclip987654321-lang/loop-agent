@@ -123,3 +123,25 @@ test('Walid pose une question : la demande reste ouverte, l’agent répond, la 
     s.done();
   }
 });
+
+test('un blocage doit être expliqué ; Walid le lève ou abandonne l’idée, et l’agent le sait', async () => {
+  const s = setup();
+  try {
+    const action = (await s.tools.lire_projet.handler({ projet: 'ebook' })).actions[0].id;
+    await assert.rejects(s.tools.ecrire_tour.handler({ projet: 'ebook', action, constat: 'Essai.', decision: 'Bloqué.', idees: [{ index: 0, erreur: 'Chrome déconnecté' }] }), /contexte/);
+    await s.tools.ecrire_tour.handler({ projet: 'ebook', action, constat: 'Essai.', decision: 'Bloqué.', idees: [{ index: 0, erreur: 'Chrome déconnecté', contexte: 'Je voulais lire les suggestions Amazon pour choisir les mots-clés ; ton Chrome est fermé.' }] });
+    const i = (await s.tools.lire_projet.handler({ projet: 'ebook' })).actions.find((x) => x.id === action).idees[0];
+    assert.equal(i.bloquee.ce_qui_bloque, 'Chrome déconnecté');
+    assert.match(i.bloquee.contexte, /mots-clés/);
+    // Une mise à jour d'idée sans erreur ne doit pas être refusée.
+    await s.tools.ecrire_tour.handler({ projet: 'ebook', action, constat: 'Suite.', decision: 'Attendre.', idees: [{ index: 0, commentaire: 'toujours bloqué' }] });
+    const avant = JSON.stringify({ tasks: [{ id: 't', title: 'Fiche', ideas: [{ text: 'Suggestions Amazon', errorState: 'Chrome' }] }] });
+    const leve = JSON.stringify({ tasks: [{ id: 't', title: 'Fiche', ideas: [{ text: 'Suggestions Amazon', unblockedAt: 'x' }] }] });
+    const aband = JSON.stringify({ tasks: [{ id: 't', title: 'Fiche', ideas: [{ text: 'Suggestions Amazon', unblockedAt: 'x', dropped: true }] }] });
+    assert.match(decisionsBetween(avant, leve)[0], /blocage levé par Walid .* réessaie/);
+    assert.ok(decisionsBetween(avant, aband).some((d) => /abandonnée par Walid/.test(d)));
+    assert.match(await s.tools.demander_a_walid.handler({ projet: 'ebook', action, demande: 'Relire la fiche Amazon', pieces: [{ titre: 'Fiche Amazon', texte: 'Titre : …' }] }), /avec 1 pièce/);
+  } finally {
+    s.done();
+  }
+});

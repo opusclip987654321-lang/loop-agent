@@ -436,7 +436,7 @@ function taskIdeaCards(t, showTools = false) {
   let banner = '';
   let reds = ideas.filter(ideaIsRed);
   if (reds.length)
-    banner = `<section class="strip red"><strong>${colorDot('rouge')}${reds.length} idée${reds.length > 1 ? 's' : ''} attend${reds.length > 1 ? 'ent' : ''} ta décision</strong><ul style="margin:8px 0 0;padding-left:20px">${reds.map((i) => `<li>${esc(i.text)}${(i.accessRequests || []).some((a) => !a.connected) ? ' <span class="mwarn">— accès manquant</span>' : ' <span class="mwarn">— proposition de l’agent</span>'}</li>`).join('')}</ul><p class="tiny" style="margin-top:8px">Elles sont placées en premier ci-dessous.</p></section>`;
+    banner = `<section class="strip red"><strong>${colorDot('rouge')}${reds.length} idée${reds.length > 1 ? 's' : ''} en rouge</strong><ul style="margin:8px 0 0;padding-left:20px">${reds.map((i) => `<li>${esc(i.text)} <span class="mwarn">— ${i.errorState ? 'l’agent est bloqué (voir le cadre en haut)' : (i.accessRequests || []).some((a) => !a.connected) ? 'l’agent a besoin d’un accès (voir le cadre en haut)' : 'idée de l’agent : à valider ou refuser'}</span></li>`).join('')}</ul><p class="tiny" style="margin-top:8px">Elles sont placées en premier ci-dessous.</p></section>`;
   return (
     banner +
       order

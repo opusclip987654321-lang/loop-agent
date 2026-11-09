@@ -69,6 +69,8 @@ export function decisionsBetween(oldValue, newValue) {
       if (before.approvalStatus === 'pending' && idea.approvalStatus && idea.approvalStatus !== 'pending')
         out.push(`idée « ${label} » sur « ${name} » : ${idea.approvalStatus === 'approved' ? 'validée' : 'refusée'}`);
       if (idea.walidReply && idea.walidReply !== before.walidReply) out.push(`réponse de Walid sur l'idée « ${label} » (« ${name} »)`);
+      if (before.errorState && !idea.errorState && idea.unblockedAt) out.push(`blocage levé par Walid sur l'idée « ${label} » (« ${name} ») : réessaie`);
+      if (idea.dropped && !before.dropped) out.push(`idée « ${label} » (« ${name} ») abandonnée par Walid : ne la refais pas`);
     });
   }
   const oldKpis = byId(a.kpis);
