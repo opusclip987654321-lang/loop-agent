@@ -49,11 +49,15 @@ const labelFor = (agent) => {
   if (id === 'factures') return 'Factures';
   return PROJECTS.find((p) => p.id === id)?.name || id;
 };
+// Telegram : seulement ce qui attend la décision de Walid (récap des agents) et les mails urgents
+// (choix de Walid du 09/11/2026). Les autres modules tournent mais n'envoient rien : tout reste
+// visible dans Loop Agent.
+const silencieux = async (texte) => console.log('(Telegram coupé)', String(texte).split('\n')[0].slice(0, 120));
 const relay = createRoutineRelay({
   dataDir: config.dataDir,
   cooldownMs: Number(process.env.ROUTINE_COOLDOWN_MINUTES || 30) * 60 * 1000,
   labelFor,
-  notify: (text) => (notifier.enabled ? notifier.send(text) : Promise.resolve()),
+  notify: silencieux,
 });
 const stopRelay = relay.start();
 {
@@ -65,20 +69,20 @@ const stopRelay = relay.start();
 const stopSurveillance =
   process.env.SURVEILLANCE === '0'
     ? () => {}
-    : createSurveillance({ dataDir: config.dataDir, notify: (text) => (notifier.enabled ? notifier.send(text) : Promise.resolve()) }).start();
+    : createSurveillance({ dataDir: config.dataDir, notify: silencieux }).start();
 console.log(process.env.SURVEILLANCE === '0' ? 'Surveillance des sites : coupée.' : 'Surveillance des sites : active (toutes les 5 min).');
 
 // Rappels Argent : renouvellements à 3 jours et bilan du 1er du mois (reprise du cerveau central).
-const stopArgent = notifier.enabled ? createArgentRappels({ db, dataDir: config.dataDir, notify: (t) => notifier.send(t) }).start() : () => {};
+const stopArgent = notifier.enabled ? createArgentRappels({ db, dataDir: config.dataDir, notify: silencieux }).start() : () => {};
 
 // Mails urgents des 6 boîtes Gmail, chaque heure (reprise du cerveau central). Sans adresse rangée, ne fait rien.
 const stopBoites = notifier.enabled ? createBoites({ dataDir: config.dataDir, notify: (t) => notifier.send(t) }).start() : () => {};
 
 // Compte rendu SEO du dimanche 8 h (reprise du cerveau central, sans IA).
-const stopSeo = createSeo({ db, dataDir: config.dataDir, notify: (t) => (notifier.enabled ? notifier.send(t) : Promise.resolve()) }).start();
+const stopSeo = createSeo({ db, dataDir: config.dataDir, notify: silencieux }).start();
 
 // Veille quotidienne de la prospection Nūr Meet (11 h) : Telegram seulement en cas de problème.
-const stopVeilleNour = notifier.enabled ? createNourVeille({ db, dataDir: config.dataDir, notify: (t) => notifier.send(t) }).start() : () => {};
+const stopVeilleNour = notifier.enabled ? createNourVeille({ db, dataDir: config.dataDir, notify: silencieux }).start() : () => {};
 
 // Chiffres de vegebudget.fr (visiteurs, inscriptions, abonnés), chaque heure. Sans jeton rangé, ne fait rien.
 const stopVegebudget = createReleveVegebudget({ db, dataDir: config.dataDir }).start();

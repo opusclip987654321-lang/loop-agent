@@ -49,13 +49,12 @@ test('récap : un seul message par agent, envoyé après le silence, puis vidé'
     assert.equal(await s.notifier.flush(Date.now()), 0);
     assert.equal(s.sent.length, 0);
 
-    // Après le silence : un message, deux lignes, un point à valider.
+    // Après le silence : un message, seulement ce qui attend Walid (pas le résumé du tour).
     assert.equal(await s.notifier.flush(Date.now() + 61_000), 1);
     const text = s.sent[0].body.text;
     assert.equal(s.sent[0].body.chat_id, '42');
-    assert.match(text, /^🔁 cambodge — tour terminé/);
-    assert.match(text, /1 point\(s\) attendent ta validation/);
-    assert.match(text, /15 offres lues/);
+    assert.match(text, /^🔴 cambodge : une chose attend ta décision/);
+    assert.doesNotMatch(text, /15 offres lues/);
     assert.match(text, /Nouvelle action à valider : Filtrer le télétravail/);
     assert.match(text, /https:\/\/exemple\.test$/);
 
@@ -69,12 +68,26 @@ test('récap : un seul message par agent, envoyé après le silence, puis vidé'
 test('récap : Telegram en panne → on garde les lignes et on réessaie', async () => {
   const s = setup();
   try {
-    const p = await s.tools.lire_projet.handler({ projet: 'cambodge' });
-    await s.tools.ecrire_tour.handler({ projet: 'cambodge', action: p.actions[0].id, constat: 'c', decision: 'd' });
+    await s.tools.proposer_action.handler({
+      projet: 'cambodge', titre: 'Filtrer le télétravail', objectif: 'x', type: 'Boucle', critere: 'y', objectif_type: 'fait_pas_fait', brief: BRIEF,
+    });
     s.setFail(true);
     assert.equal(await s.notifier.flush(Date.now() + 61_000), 0);
     s.setFail(false);
     assert.equal(await s.notifier.flush(Date.now() + 61_000), 1);
+  } finally {
+    s.done();
+  }
+});
+
+test('récap : un tour sans rien qui attende Walid n’envoie aucun message', async () => {
+  const s = setup();
+  try {
+    const p = await s.tools.lire_projet.handler({ projet: 'cambodge' });
+    await s.tools.ecrire_tour.handler({ projet: 'cambodge', action: p.actions[0].id, constat: 'c', decision: 'd' });
+    assert.equal(await s.notifier.flush(Date.now() + 61_000), 0);
+    assert.equal(s.sent.length, 0);
+    assert.equal(await s.notifier.flush(Date.now() + 120_000), 0, 'les lignes ont été vidées');
   } finally {
     s.done();
   }
@@ -95,10 +108,10 @@ test('récap : sans jeton, rien n’est noté', () => {
 });
 
 test('récap : message trop long coupé sous la limite Telegram', () => {
-  const rows = Array.from({ length: 100 }, (_, i) => ({ line: `▸ ligne ${i} ` + 'x'.repeat(100), needs_ok: 0 }));
+  const rows = Array.from({ length: 100 }, (_, i) => ({ line: `▸ ligne ${i} ` + 'x'.repeat(100), needs_ok: 1 }));
   const m = buildMessage('A', rows, '');
   assert.ok(m.length < 4096);
-  assert.match(m, /autre\(s\) ligne\(s\) dans Loop Agent/);
+  assert.match(m, /autre\(s\) dans Loop Agent/);
 });
 
 test('sauvegarde : base lisible, factures copiées, 14 gardées', () => {

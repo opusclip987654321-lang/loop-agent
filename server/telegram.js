@@ -66,14 +66,16 @@ export function describeEvent(tool, args = {}) {
   }
 }
 
+// Telegram ne porte que ce qui attend Walid (choix de Walid du 09/11/2026) : pas de résumé de
+// tour, seulement les points qui demandent sa décision ou son action, et où les trouver.
 export function buildMessage(agentLabel, rows, siteUrl) {
-  const waiting = rows.filter((r) => r.needs_ok).length;
-  const head = `🔁 ${agentLabel} — tour terminé` + (waiting ? `\n⚠️ ${waiting} point(s) attendent ta validation` : '');
+  const oks = rows.filter((r) => r.needs_ok);
+  const head = `🔴 ${agentLabel} : ${oks.length > 1 ? oks.length + ' choses attendent' : 'une chose attend'} ta décision`;
   const lines = [];
   let size = head.length;
-  for (const r of rows) {
+  for (const r of oks) {
     if (size + r.line.length + 1 > MAX_MESSAGE - 120) {
-      lines.push(`… et ${rows.length - lines.length} autre(s) ligne(s) dans Loop Agent.`);
+      lines.push(`… et ${oks.length - lines.length} autre(s) dans Loop Agent.`);
       break;
     }
     lines.push(r.line);
@@ -122,6 +124,11 @@ export function createNotifier({
       for (const agent of db.quietNoticeAgents(cutoff)) {
         const rows = db.noticesFor(agent);
         if (!rows.length) continue;
+        // Un tour sans rien qui attende Walid : aucun message.
+        if (!rows.some((r) => r.needs_ok)) {
+          db.deleteNotices(rows.map((r) => r.id));
+          continue;
+        }
         try {
           await send(buildMessage(labelFor(agent), rows, siteUrl));
           db.deleteNotices(rows.map((r) => r.id));
