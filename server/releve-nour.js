@@ -11,6 +11,7 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { createHash, timingSafeEqual } from 'node:crypto';
+import { nettoyerReponses } from './reponses-nour.js';
 
 export const ROUTE = '/releve/nour-meet';
 const SOURCE = 'releve-n8n';
@@ -57,7 +58,7 @@ export function nettoyer(body) {
   const g = body.glissant7 || {};
   const glissant7 = { envoyes: n(g.envoyes), ouverts: n(g.ouverts) };
   const r = body.restaurants && typeof body.restaurants === 'object' ? { total: n(body.restaurants.total), abonnes: n(body.restaurants.abonnes) } : null;
-  return { jours, glissant7, restaurants: r };
+  return { jours, glissant7, restaurants: r, reponses: nettoyerReponses(body.reponses) };
 }
 
 // Applique le relevé au document du projet (fonction pure, testée seule).
@@ -74,6 +75,7 @@ export function appliquer(doc, releve, nowIso) {
   const ouverture = kpis.find((k) => /ouverture/i.test(k.name));
   const inscriptions = kpis.find((k) => /inscription/i.test(k.name));
   const abonnes = kpis.find((k) => /abonn/i.test(k.name));
+  const recues = kpis.find((k) => /réponses reçues/i.test(k.name));
   doc.kpiValues = doc.kpiValues || [];
   // Le relevé lit directement n8n : pour ce jour et cet indicateur, il remplace toute autre
   // mesure (celle d'un agent qui recopiait Notion, par exemple), sinon une somme compterait double.
@@ -95,6 +97,12 @@ export function appliquer(doc, releve, nowIso) {
     poser(ouverture, aujourdhui, taux, `${g.ouverts} mail(s) ouvert(s) sur ${g.envoyes} envoyé(s) ces 7 derniers jours.`);
     ecrits.push(ouverture.name + ' ' + aujourdhui);
   }
+  if (recues)
+    for (const [d, s] of Object.entries(releve.jours))
+      if (s.reponses !== null) {
+        poser(recues, d, s.reponses, `${s.reponses} réponse(s) de restaurant reçue(s) ce jour-là (toutes, avant tri).`);
+        ecrits.push(recues.name + ' ' + d);
+      }
   const ORIGIN_BASE = 'Base de l’application Nūr Meet (comptes restaurateurs hors démo, abonnements actifs), relevé automatique';
   if (inscriptions)
     for (const [d, s] of Object.entries(releve.jours))

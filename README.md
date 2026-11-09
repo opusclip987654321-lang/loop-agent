@@ -105,6 +105,10 @@ Chaque heure, Loop Agent lit `https://vegebudget.fr/api/stats` (jeton dans `/dat
 
 Toutes les 3 heures, Loop Agent lit en lecture seule les membres de la campagne Patreon (API v2) et remplit « Nouveaux membres Patreon » (arrivées actives par jour, 14 derniers jours) , « Revenus Patreon du mois » (total mensuel des membres actifs) et « Membres gratuits Patreon » (créé au premier relevé, décision de Walid du 09/11). Seuls des nombres entrent, aucun nom. Accès (client, secret, clé d'accès, clé de renouvellement) dans `/data/patreon.json` (droits 600), rangés par `ssh -t loop-agent-vps 'docker exec -it loop-agent node scripts/patreon-jeton.js ranger'` (saisie masquée) ; la clé d'accès est renouvelée toute seule avant d'expirer. `essai` affiche seulement des totaux, `retirer` débranche.
 
+## Tri des réponses des restaurants (Nūr Meet)
+
+Le relevé horaire du serveur Nūr envoie aussi les réponses des restaurants des 21 derniers jours (n8n np_reponses), coupées avant la citation, adresses et téléphones masqués. Elles attendent dans le document `nour-reponses`. La tâche Claude « Tri des réponses Nūr Meet » (abonnement, 12 h 37 et 18 h 52) les lit avec `reponses_a_trier` et les classe avec `trier_reponses` (même consigne que le cerveau : INTERESSE, QUESTION, REFUS, AUTOMATIQUE, AUTRE). Après le tri, le texte est effacé. Un intéressé ou une question devient une demande à Walid sur « Lire les réponses reçues » (Telegram), et « Réponses intéressées » est recalculé ; « Réponses reçues des restaurants » vient du relevé.
+
 ## Données
 
 Volume Docker `loop-agent_loop_agent_data` : `loop-agent.sqlite` (tout) et `files/` (factures).

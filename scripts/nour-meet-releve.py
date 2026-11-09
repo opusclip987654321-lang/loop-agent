@@ -139,6 +139,38 @@ envoyes7 = [l for l in envois if l.get("statut") == "envoye" and (jour_envoi(l) 
 ouverts7 = sum(1 for l in envoyes7 if str(l.get("id")) in premiere_ouverture)
 corps = {"jours": stats, "glissant7": {"envoyes": len(envoyes7), "ouverts": ouverts7}}
 
+# Les réponses des restaurants des 21 derniers jours, pour le tri par Claude dans Loop Agent
+# (reprise du cerveau, 09/11/2026) : texte coupé avant la citation du mail d'origine,
+# adresses et téléphones masqués ; le nom du restaurant est retrouvé par son adresse ou l'objet.
+import hashlib
+
+
+def masquer(t):
+    t = re.sub(r"[\w.+-]+@[\w-]+(\.[\w-]+)+", "[adresse masquée]", t)
+    return re.sub(r"(?:\+|00)?\d[\d .\-()]{7,}\d", lambda m: "[téléphone masqué]" if len(re.sub(r"\D", "", m.group(0))) >= 9 else m.group(0), t)
+
+
+par_email = {str(p.get("email") or "").lower(): p for p in prospects if p.get("email")}
+noms_longs = sorted([p for p in prospects if len(str(p.get("nom") or "")) >= 5], key=lambda p: -len(str(p.get("nom"))))
+debut21 = (aujourdhui - datetime.timedelta(days=21)).isoformat()
+a_trier = []
+for r in reponses:
+    j = jour_de(r.get("recu"))
+    if not j or j < debut21:
+        continue
+    objet = str(r.get("objet") or "")
+    brut = str(r.get("texte") or "")
+    p = par_email.get(str(r.get("email") or "").lower()) or next((x for x in noms_longs if objet and str(x.get("nom")).lower() in objet.lower()), None)
+    cle = hashlib.sha256(f"{j}|{r.get('de') or r.get('email') or ''}|{objet}|{brut[:200]}".encode()).hexdigest()[:16]
+    texte = re.split(r"\n\s*(?:>|Le .{0,120}a écrit|De ?:|From ?:)", brut)[0]
+    a_trier.append({
+        "cle": cle, "jour": j,
+        "nom": str(p.get("nom"))[:80] if p and p.get("nom") else None,
+        "ville": str(p.get("ville"))[:40] if p and p.get("ville") else None,
+        "objet": masquer(objet)[:150], "texte": masquer(texte).strip()[:800],
+    })
+corps["reponses"] = a_trier[-60:]
+
 # Restaurants inscrits et abonnés, lus dans la base de l'application Nūr Meet (même serveur),
 # en LECTURE SEULE : comptes « ORGANIZER » hors démo, abonnements actifs. Seulement des nombres.
 SQL = """
@@ -169,7 +201,7 @@ except Exception as e:
     print("base Nūr Meet illisible :", str(e)[:200])
 
 if ESSAI:
-    print(json.dumps(corps, ensure_ascii=False, indent=1))
+    print(json.dumps({**corps, "reponses": f"{len(corps.get('reponses', []))} réponse(s) à trier (textes non affichés)"}, ensure_ascii=False, indent=1))
     sys.exit(0)
 
 jeton = (ICI / "jeton").read_text().strip()

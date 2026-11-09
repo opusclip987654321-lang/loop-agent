@@ -16,6 +16,7 @@ import { join } from 'node:path';
 import { PROJECTS } from './projects.js';
 import { defaultProjectDoc, defaultMoneyDoc, newIdea } from './defaults.js';
 import { creerDepot } from './depots.js';
+import * as tri from './reponses-nour.js';
 import '../public/periodes.js';
 
 const P = globalThis.LAPeriodes;
@@ -396,6 +397,7 @@ export function createAgentTools({ db, dataDir, onAgentWrite = () => {}, onToolD
           seo: (doc.seo || [])[0]
             ? { semaine: doc.seo[0].semaine, site: doc.seo[0].site, note_sur_100: doc.seo[0].note, note_precedente: doc.seo[1]?.note ?? null, actions_possibles: doc.seo[0].actions.map((a) => a.texte), consigne: 'Compte rendu SEO du dimanche (sans IA). Pour corriger un point, proposer_action ou proposer_idee : rien ne se change sans la validation de Walid.' }
             : undefined,
+          reponses_restaurants: p.id === 'nourmeet' ? tri.resumePourAgent(tri.lireEtat(db)) : undefined,
           bilans_a_ecrire: missingBilans(doc),
           derniers_bilans: (doc.bilans || []).slice(0, 4).map((b) => ({ periode: b.gran + ' ' + b.period, pourquoi: b.why, action_decisive: b.decisive || undefined, par: b.by })),
           memoire: (doc.memories || []).map((m, index) => ({
@@ -1044,6 +1046,77 @@ export function createAgentTools({ db, dataDir, onAgentWrite = () => {}, onToolD
       },
     },
     {
+      name: 'reponses_a_trier',
+      description:
+        'Nūr Meet seulement : les réponses des restaurants à la prospection, pas encore classées (adresses et téléphones masqués), avec la consigne de tri. Classe-les puis appelle trier_reponses.',
+      inputSchema: { type: 'object', properties: { projet: { type: 'string', description: 'nourmeet' } }, required: ['projet'] },
+      handler(args) {
+        if (findProject(args.projet).id !== 'nourmeet') throw new ToolError('Le tri des réponses ne concerne que le projet nourmeet.');
+        const etat = tri.lireEtat(db);
+        const reponses = Object.values(etat.aTrier || {})
+          .sort((a, b) => (a.jour < b.jour ? -1 : 1))
+          .slice(0, 60)
+          .map((r) => ({ cle: r.cle, jour: r.jour, restaurant: r.nom || 'inconnu', objet: r.objet, texte: r.texte }));
+        return { consigne: tri.CONSIGNE_TRI, types: tri.TYPES_REPONSE, reponses };
+      },
+    },
+    {
+      name: 'trier_reponses',
+      description:
+        'Nūr Meet seulement : enregistre le classement des réponses lues avec reponses_a_trier. Un restaurant intéressé ou qui pose une question devient automatiquement une demande à Walid (le prévient) ; le texte est ensuite effacé de Loop Agent.',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          projet: { type: 'string', description: 'nourmeet' },
+          reponses: {
+            type: 'array',
+            items: {
+              type: 'object',
+              properties: { cle: { type: 'string' }, type: { type: 'string', enum: Object.keys(tri.TYPES_REPONSE) }, resume: { type: 'string', description: 'Une phrase en français, sans adresse ni téléphone.' } },
+              required: ['cle', 'type', 'resume'],
+            },
+          },
+        },
+        required: ['projet', 'reponses'],
+      },
+      handler(args) {
+        if (findProject(args.projet).id !== 'nourmeet') throw new ToolError('Le tri des réponses ne concerne que le projet nourmeet.');
+        const at = nowIso();
+        const nouvelles = mutate(tri.KEY, () => ({ aTrier: {}, triees: {} }), (etat) => tri.noterTri(etat, args.reponses, at), 'agent:nourmeet');
+        if (!nouvelles.length) return 'Aucune réponse enregistrée : clés inconnues ou déjà triées (relis reponses_a_trier).';
+        const etat = tri.lireEtat(db);
+        const parJour = tri.positifsParJour(etat);
+        const recent = new Date(Date.now() - 7 * 86400000).toISOString().slice(0, 10);
+        const ouvertes = [];
+        mutateProject('nourmeet', 'agent:nourmeet', (doc) => {
+          const kpi = (doc.kpis || []).find((k) => k.status === 'valide' && /réponses intéressées/i.test(k.name));
+          if (kpi) {
+            doc.kpiValues = doc.kpiValues || [];
+            for (const [d, v] of Object.entries(parJour)) {
+              doc.kpiValues = doc.kpiValues.filter((x) => !(x.kpi === kpi.id && x.date === d));
+              doc.kpiValues.unshift({ id: 'tri-' + kpi.id.slice(-6) + '-' + d, kpi: kpi.id, date: d, at, source: 'tri-reponses', origin: 'Réponses des restaurants (n8n Nour Meet 4) classées par Claude', note: `${v} restaurant(s) intéressé(s) ou avec une question.`, value: v });
+            }
+          }
+          const t = (doc.tasks || []).find((x) => x.id === tri.ACTION);
+          if (!t) return;
+          for (const r of nouvelles.filter((x) => tri.POSITIFS.has(x.type) && x.jour >= recent)) {
+            const qui = r.nom || 'Un restaurant';
+            const d = ouvrirDemande(t, `Répondre à ${qui}${r.ville ? ' (' + r.ville + ')' : ''} : ${r.type === 'INTERESSE' ? 'intéressé' : 'pose une question'} — ${r.resume}`, {
+              source: 'agent',
+              pourquoi: `Ce restaurant a répondu le ${r.jour.split('-').reverse().join('/')} au mail de prospection. Un restaurant qui montre de l'intérêt attend une réponse rapide, sinon il passe à autre chose. Réponds-lui depuis contact@nourmeet.com : son mail complet, avec ses coordonnées, est dans cette boîte.`,
+            });
+            if (!d) continue;
+            if (r.texte || r.objet) d.pieces = [{ titre: 'Sa réponse (adresse et téléphone masqués)', texte: `Objet : ${r.objet || '—'}\n\n${r.texte || ''}` }];
+            ouvertes.push(d.texte);
+          }
+        });
+        for (const texte of ouvertes) onToolDone('agent:nourmeet', 'demander_a_walid', { projet: 'nourmeet', demande: texte });
+        const types = {};
+        for (const r of nouvelles) types[r.type] = (types[r.type] || 0) + 1;
+        return `${nouvelles.length} réponse(s) triée(s) (${Object.entries(types).map(([k, v]) => v + ' ' + k).join(', ')}). ${ouvertes.length} demande(s) ouverte(s) pour Walid.`;
+      },
+    },
+    {
       name: 'enregistrer_depense',
       description:
         'Note dans la page Argent une dépense RÉELLE du projet (abonnement, recharge, coût d’une API facturée : Google Cloud, Twilio…). Ce n’est qu’un relevé : tu n’engages jamais de dépense nouvelle sans l’accord de Walid. Donne toujours la source. Un abonnement déjà connu (même nom, même projet) est mis à jour au lieu d’être dupliqué. Un montant calculé et non lu sur une facture : estimation:true. Le coût affiché d’une session Claude n’est PAS une dépense (il est dans l’abonnement).',
@@ -1157,4 +1230,5 @@ export const CONNECTOR_INSTRUCTIONS = `Loop Agent est le tableau de bord des bou
 12. Quand Walid doit faire ou décider quelque chose (choisir, donner un accès, créer un compte, installer, envoyer) : demander_a_walid (ou signaler_acces pour un accès à un outil). La demande reste ouverte et l'action rouge jusqu'à ce que Walid la ferme. Joins-y ce qu'il doit regarder pour décider (images ou PDF déposés avec preparer_depot, ou liens) : il doit pouvoir décider sans chercher ailleurs. Une phrase « Pour Walid : … » écrite dans un compte rendu est rattrapée automatiquement, mais utilise l'outil : une chose par demande, en une phrase simple.
 13. Questions de Walid : au DÉBUT de chaque tour, regarde dans lire_projet les demandes qui ont « question_de_walid_a_repondre » et réponds à chacune avec repondre_a_walid, clairement et simplement, avec tes arguments et ta recommandation. Mets bloque_sans_walid à true seulement si tu ne peux plus avancer sans une action de sa part (sinon pas de Telegram). La demande reste ouverte : c'est Walid qui la ferme quand il a décidé.
 14. Contexte : tout ce que Walid lit (demandes, blocages, comptes rendus) dit en mots simples ce que tu voulais faire, pourquoi c'est utile au projet, et ce qui se passe. Un blocage s'écrit avec ecrire_tour → idees[].erreur ET idees[].contexte. Une idée « abandonnee_par_walid » ne se refait pas ; « blocage_leve_par_walid » veut dire : réessaie.
+15. Nūr Meet : si lire_projet → reponses_restaurants → a_trier est supérieur à 0, appelle reponses_a_trier, classe chaque réponse selon la consigne, puis trier_reponses. Les intéressés deviennent seuls des demandes à Walid : ne les redemande pas.
 Jamais de mot de passe, de clé ni de jeton dans ce que tu écris.`;
