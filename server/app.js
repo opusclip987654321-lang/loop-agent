@@ -8,6 +8,7 @@ import { verifyPassword, newSessionToken, tokenHash, createLoginLimiter } from '
 import { createMcpHandler } from './mcp.js';
 import { createAgentTools, CONNECTOR_INSTRUCTIONS } from './agent-tools.js';
 import { servir as servirMethodeNour } from './nour-methode.js';
+import { DEPOT_RE, prendreDepot } from './depots.js';
 import { ROUTE as RELEVE_NOUR_ROUTE, jetonValide as jetonReleveValide, nettoyer as nettoyerReleve, enregistrerReleve } from './releve-nour.js';
 
 const PUBLIC_DIR = fileURLToPath(new URL('../public/', import.meta.url));
@@ -318,6 +319,25 @@ export function createApp({
       if (path === '/healthz') return send(res, 200, { ok: true });
       // Méthode de la loop Nūr Meet, lue chaque matin par n8n (adresse secrète, sans connexion).
       if (req.method === 'GET' && servirMethodeNour(dataDir, path, res)) return;
+      // Dépôt d'une image ou d'un PDF par un agent, à joindre à une demande (adresse à usage unique).
+      const depot = DEPOT_RE.exec(path);
+      if (depot) {
+        if (req.method !== 'PUT' && req.method !== 'POST') throw new HttpError(405, 'PUT uniquement.');
+        if (!prendreDepot(depot[1])) throw new HttpError(404, 'Adresse de dépôt inconnue, déjà utilisée ou expirée : redemande-en une avec preparer_depot.');
+        const buf = await readBody(req, MAX_FILE_BYTES);
+        const type = detectFileType(buf);
+        if (!type) throw new HttpError(415, 'Format accepté : PDF, PNG, JPG ou WebP.');
+        let name = 'piece';
+        try {
+          name = decodeURIComponent(String(req.headers['x-file-name'] || 'piece'));
+        } catch {}
+        name = name.replace(/[\u0000-\u001f\\/]/g, '_').slice(0, 160) || 'piece';
+        const id = randomBytes(12).toString('hex');
+        await mkdir(filesDir, { recursive: true });
+        await writeFile(join(filesDir, id), buf, { flag: 'wx' });
+        db.addFile({ id, name, mime: type.mime, size: buf.length });
+        return send(res, 201, { fichier: id, nom: name, type: type.mime, taille: buf.length, suite: 'Cite ce fichier dans demander_a_walid (pieces : [{ "titre": "…", "fichier": "' + id + '" }]).' });
+      }
       // Relevé chiffré de la prospection Nūr Meet, envoyé chaque heure par le serveur de Nūr (jeton).
       if (path === RELEVE_NOUR_ROUTE) {
         if (req.method !== 'POST') throw new HttpError(405, 'POST uniquement.');

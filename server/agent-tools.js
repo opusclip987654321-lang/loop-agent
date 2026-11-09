@@ -15,6 +15,7 @@ import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { PROJECTS } from './projects.js';
 import { defaultProjectDoc, defaultMoneyDoc, newIdea } from './defaults.js';
+import { creerDepot } from './depots.js';
 import '../public/periodes.js';
 
 const P = globalThis.LAPeriodes;
@@ -384,7 +385,7 @@ export function createAgentTools({ db, dataDir, onAgentWrite = () => {}, onToolD
               reponse_walid_le: (i.walidReply && i.walidReplyAt) || undefined,
               acces_manquants: (i.accessRequests || []).filter((a) => !a.connected).map((a) => a.name),
             })),
-            demandes_a_walid: (t.demandes || []).slice(0, 10).map((d) => ({ id: d.id, demande: d.texte, statut: d.statut, depuis: d.at, fermee_le: d.fermeeLe || undefined, reponse_walid: d.reponse || undefined })),
+            demandes_a_walid: (t.demandes || []).slice(0, 10).map((d) => ({ id: d.id, demande: d.texte, statut: d.statut, pieces: (d.pieces || []).map((p) => p.titre), depuis: d.at, fermee_le: d.fermeeLe || undefined, reponse_walid: d.reponse || undefined })),
             derniers_tours: (t.reviewHistory || []).slice(0, 3),
             messages_de_walid: (t.reviewConversation || []).filter((m) => m.role === 'Walid').slice(-5),
           })),
@@ -838,7 +839,7 @@ export function createAgentTools({ db, dataDir, onAgentWrite = () => {}, onToolD
     {
       name: 'demander_a_walid',
       description:
-        'Quand tu as besoin que Walid fasse ou décide quelque chose (choisir, donner un accès, créer un compte, installer, envoyer, répondre) : enregistre la demande ici. L’action reste rouge et la demande visible jusqu’à ce que Walid la ferme lui-même ; valider l’action ne la ferme pas. Une seule chose par demande, en une phrase simple. Lis la suite dans lire_projet → demandes_a_walid.',
+        'Quand tu as besoin que Walid fasse ou décide quelque chose (choisir, donner un accès, créer un compte, installer, envoyer, répondre) : enregistre la demande ici. L’action reste rouge et la demande visible jusqu’à ce que Walid la ferme lui-même ; valider l’action ne la ferme pas. Une seule chose par demande, en une phrase simple. JOINS TOUJOURS ce qu’il doit regarder pour décider (pieces) : les images ou PDF (déposés d’abord avec preparer_depot), ou des liens https. Pour ajouter des pièces à une demande déjà ouverte : demande_id. Lis la suite dans lire_projet → demandes_a_walid.',
       inputSchema: {
         type: 'object',
         properties: {
@@ -846,15 +847,58 @@ export function createAgentTools({ db, dataDir, onAgentWrite = () => {}, onToolD
           action: { type: 'string' },
           demande: { type: 'string', description: 'Ce que Walid doit faire, en une phrase simple (ex. « Choisir la couverture A ou D »).' },
           pourquoi: { type: 'string', description: 'Pourquoi c’est nécessaire, et ce qui est bloqué en attendant.' },
+          demande_id: { type: 'string', description: 'Pour ajouter des pièces à une demande déjà ouverte (id dans lire_projet → demandes_a_walid).' },
+          pieces: {
+            type: 'array',
+            description: 'Ce que Walid doit voir pour décider : { titre, fichier } (identifiant rendu par le dépôt) ou { titre, url } (lien https).',
+            items: { type: 'object', properties: { titre: { type: 'string' }, fichier: { type: 'string' }, url: { type: 'string' } }, required: ['titre'] },
+          },
         },
-        required: ['projet', 'action', 'demande'],
+        required: ['projet', 'action'],
       },
       handler(args) {
+        const pieces = (Array.isArray(args.pieces) ? args.pieces : []).slice(0, 8).map((p, i) => {
+          const titre = text(p && p.titre, `pieces[${i}].titre`, { max: 120 });
+          if (p.fichier) {
+            const f = /^[a-f0-9]{24}$/.test(String(p.fichier)) ? db.getFile(String(p.fichier)) : null;
+            if (!f) throw new ToolError(`pieces[${i}] : fichier « ${p.fichier} » inconnu. Dépose-le d’abord avec preparer_depot.`);
+            return { titre, fichier: f.id, type: f.mime };
+          }
+          if (p.url && /^https:\/\/\S+$/.test(String(p.url)) && String(p.url).length <= 600) return { titre, url: String(p.url) };
+          throw new ToolError(`pieces[${i}] : donne un « fichier » (déposé avec preparer_depot) ou une « url » en https.`);
+        });
         return mutateProject(args.projet, agentName(args), (doc) => {
           const t = findTask(doc, args.action);
+          if (args.demande_id) {
+            const d = (t.demandes || []).find((x) => x.id === args.demande_id && x.statut === 'ouverte');
+            if (!d) throw new ToolError('Demande introuvable ou déjà fermée par Walid (voir lire_projet → demandes_a_walid).');
+            d.pieces = [...(d.pieces || []), ...pieces].slice(0, 12);
+            return `${pieces.length} pièce(s) ajoutée(s) à « ${d.texte} ».`;
+          }
           const d = ouvrirDemande(t, text(args.demande, 'demande', { max: 300 }), { source: 'agent', pourquoi: text(args.pourquoi, 'pourquoi', { max: 500, required: false }) });
-          return d ? `Demande enregistrée : « ${d.texte} ». Elle reste ouverte jusqu’à ce que Walid la ferme.` : 'Cette demande est déjà ouverte (ou vient d’être fermée par Walid) : rien de nouveau.';
+          if (!d) {
+            const deja = (t.demandes || []).find((x) => x.statut === 'ouverte' && norm(x.texte) === norm(args.demande));
+            if (deja && pieces.length) {
+              deja.pieces = [...(deja.pieces || []), ...pieces].slice(0, 12);
+              return `Cette demande était déjà ouverte : ${pieces.length} pièce(s) ajoutée(s).`;
+            }
+            return 'Cette demande est déjà ouverte (ou vient d’être fermée par Walid) : rien de nouveau.';
+          }
+          if (pieces.length) d.pieces = pieces;
+          return `Demande enregistrée : « ${d.texte} »${pieces.length ? ` avec ${pieces.length} pièce(s)` : ''}. Elle reste ouverte jusqu’à ce que Walid la ferme.`;
         });
+      },
+    },
+    {
+      name: 'preparer_depot',
+      description:
+        'Donne une adresse à usage unique (30 minutes) pour déposer une image (PNG, JPG, WebP) ou un PDF que Walid doit voir, par exemple deux couvertures à comparer. Envoie le fichier avec : curl -sS -X PUT --data-binary @CHEMIN -H "x-file-name: NOM" ADRESSE. La réponse donne « fichier » : cite-le dans demander_a_walid (pieces). Une adresse par fichier.',
+      inputSchema: { type: 'object', properties: { projet: { type: 'string' } }, required: ['projet'] },
+      handler(args) {
+        findProject(args.projet);
+        const site = (process.env.SITE_URL || 'https://loopagent.actualitevideo.fr').replace(/\/+$/, '');
+        const adresse = `${site}/depot/${creerDepot(args.projet)}`;
+        return { adresse, valable_minutes: 30, commande: `curl -sS -X PUT --data-binary @CHEMIN_DU_FICHIER -H "x-file-name: nom.png" ${adresse}` };
       },
     },
     {
@@ -1072,5 +1116,5 @@ export const CONNECTOR_INSTRUCTIONS = `Loop Agent est le tableau de bord des bou
 9. Lis les règles d'or du projet (regles dans lire_projet) : ce sont des décisions de Walid.
 10. Résultats : propose 3 à 6 indicateurs clés par projet (proposer_indicateur) s'il n'y en a pas ; mesure les indicateurs validés à chaque tour (enregistrer_indicateur) ; écris les bilans dus (lire_projet → bilans_a_ecrire) avec ecrire_bilan : pourquoi on a progressé ou reculé par rapport à la période précédente, et l'action qui a changé la donne.
 11. Argent : quand tu connais une dépense réelle du projet (abonnement, recharge, API facturée), note-la avec enregistrer_depense et sa source ; un montant calculé se marque estimation:true. Le coût affiché d'une session Claude n'est pas une dépense. Tu n'engages jamais de dépense nouvelle sans l'accord de Walid.
-12. Quand Walid doit faire ou décider quelque chose (choisir, donner un accès, créer un compte, installer, envoyer) : demander_a_walid (ou signaler_acces pour un accès à un outil). La demande reste ouverte et l'action rouge jusqu'à ce que Walid la ferme. Une phrase « Pour Walid : … » écrite dans un compte rendu est rattrapée automatiquement, mais utilise l'outil : une chose par demande, en une phrase simple.
+12. Quand Walid doit faire ou décider quelque chose (choisir, donner un accès, créer un compte, installer, envoyer) : demander_a_walid (ou signaler_acces pour un accès à un outil). La demande reste ouverte et l'action rouge jusqu'à ce que Walid la ferme. Joins-y ce qu'il doit regarder pour décider (images ou PDF déposés avec preparer_depot, ou liens) : il doit pouvoir décider sans chercher ailleurs. Une phrase « Pour Walid : … » écrite dans un compte rendu est rattrapée automatiquement, mais utilise l'outil : une chose par demande, en une phrase simple.
 Jamais de mot de passe, de clé ni de jeton dans ce que tu écris.`;

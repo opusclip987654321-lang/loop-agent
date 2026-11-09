@@ -56,3 +56,42 @@ test('fermer une demande est une décision de Walid (relance) ; Telegram la sign
   assert.deepEqual(decisionsBetween(avant, apres), ['demande « Choisir A ou D » sur « Livre 1 » : faite (réponse de Walid : « A »)']);
   assert.match(describeEvent('demander_a_walid', { projet: 'ebook', demande: 'Choisir A ou D' }).line, /🔴 Demande à Walid \(ebook\) : Choisir A ou D/);
 });
+
+import { createServer } from 'node:http';
+import { createApp } from '../server/app.js';
+import { hashPassword } from '../server/auth.js';
+
+const PNG = Buffer.concat([Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]), Buffer.alloc(200, 1)]);
+
+test('un agent dépose une image et la joint à sa demande ; l’adresse ne sert qu’une fois', async () => {
+  const dataDir = mkdtempSync(join(tmpdir(), 'loop-agent-depot-'));
+  const db = openDb(dataDir);
+  const server = createServer(createApp({ db, dataDir, passwordHash: hashPassword('a-b-c-d-e') }));
+  await new Promise((r) => server.listen(0, '127.0.0.1', r));
+  const base = `http://127.0.0.1:${server.address().port}`;
+  try {
+    const tools = Object.fromEntries(createAgentTools({ db, dataDir }).map((t) => [t.name, t]));
+    const action = (await tools.lire_projet.handler({ projet: 'ebook' })).actions[0].id;
+    const { adresse } = await tools.preparer_depot.handler({ projet: 'ebook' });
+    const chemin = new URL(adresse).pathname;
+    const r = await fetch(base + chemin, { method: 'PUT', body: PNG, headers: { 'x-file-name': 'couverture-A.png' } });
+    assert.equal(r.status, 201);
+    const { fichier } = await r.json();
+    assert.match(fichier, /^[a-f0-9]{24}$/);
+    assert.equal((await fetch(base + chemin, { method: 'PUT', body: PNG })).status, 404, 'usage unique');
+    assert.equal((await fetch(base + (await tools.preparer_depot.handler({ projet: 'ebook' })).adresse.replace(/^https:\/\/[^/]+/, ''), { method: 'PUT', body: Buffer.from('pas une image') })).status, 415);
+    const msg = await tools.demander_a_walid.handler({ projet: 'ebook', action, demande: 'Choisir la couverture A ou D', pieces: [{ titre: 'Couverture A', fichier }, { titre: 'Planche D', url: 'https://exemple.fr/d.png' }] });
+    assert.match(msg, /avec 2 pièce\(s\)/);
+    await assert.rejects(tools.demander_a_walid.handler({ projet: 'ebook', action, demande: 'Autre', pieces: [{ titre: 'x', fichier: 'f'.repeat(24) }] }), /inconnu/);
+    await assert.rejects(tools.demander_a_walid.handler({ projet: 'ebook', action, demande: 'Autre', pieces: [{ titre: 'x', url: 'http://pas-https.fr' }] }), /https/);
+    const d = JSON.parse(db.getDoc('project:ebook').value).tasks.find((t) => t.id === action).demandes[0];
+    assert.equal(d.pieces[0].type, 'image/png');
+    const id = d.id;
+    assert.match(await tools.demander_a_walid.handler({ projet: 'ebook', action, demande_id: id, pieces: [{ titre: 'Couverture B', url: 'https://exemple.fr/b.png' }] }), /1 pièce\(s\) ajoutée/);
+    assert.equal((await fetch(base + '/api/files/' + fichier)).status, 401, 'l’image ne se voit qu’en étant connecté');
+  } finally {
+    server.close();
+    db.close();
+    rmSync(dataDir, { recursive: true, force: true });
+  }
+});

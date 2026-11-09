@@ -343,17 +343,70 @@ taskColor = function (t) {
 function demandesOuvertes(t) {
   return (t.demandes || []).filter((d) => d.statut === 'ouverte');
 }
+// Les accès demandés par l'agent (signaler_acces) et pas encore branchés.
+function accesOuverts(t) {
+  const out = [];
+  (t.ideas || []).forEach((i, idx) => {
+    if (!i || typeof i !== 'object') return;
+    (i.accessRequests || []).forEach((a, ai) => {
+      if (!a.connected) out.push({ idx, ai, a });
+    });
+  });
+  return out;
+}
+function piecesHtml(d) {
+  const ps = d.pieces || [];
+  if (!ps.length) return '';
+  return `<div style="display:flex;flex-wrap:wrap;gap:10px;margin:8px 0">${ps
+    .map((p) => {
+      if (p.fichier && /^image\//.test(p.type || '')) {
+        const src = '/api/files/' + encodeURIComponent(p.fichier);
+        return `<a href="${src}" target="_blank" rel="noopener" style="display:block;text-decoration:none;color:inherit;max-width:240px"><img src="${src}" alt="${esc(p.titre)}" style="display:block;max-width:240px;max-height:300px;border-radius:8px;border:1px solid var(--line)"><span class="tiny">${esc(p.titre)} · cliquer pour agrandir</span></a>`;
+      }
+      const href = p.fichier ? '/api/files/' + encodeURIComponent(p.fichier) : p.url;
+      return `<a href="${esc(href)}" target="_blank" rel="noopener" class="badge">${esc(p.titre)} ↗</a>`;
+    })
+    .join('')}</div>`;
+}
 function demandesStrip(t) {
   const ds = demandesOuvertes(t);
-  if (!ds.length) return '';
+  const acc = accesOuverts(t);
+  const n = ds.length + acc.length;
+  if (!n) return '';
   const rows = ds
     .map(
       (d) =>
-        `<div style="margin-top:10px"><strong>${esc(d.texte)}</strong>${d.pourquoi ? `<p class="tiny" style="margin:4px 0 0">${esc(d.pourquoi)}</p>` : ''}<p class="tiny" style="margin:4px 0 6px">Demandé le ${esc(String(d.at).slice(0, 10).split('-').reverse().join('/'))}${d.source === 'compte rendu' ? ' · repéré dans un compte rendu de l’agent' : ''}</p><input id="dem-${d.id}" placeholder="Ta réponse (facultatif), par exemple « couverture A »" style="width:100%;margin-bottom:6px"><div class="actions" style="margin-top:0">${btn('C’est fait', `fermerDemande('${t.id}','${d.id}','faite')`, 'good')}${btn('Plus besoin', `fermerDemande('${t.id}','${d.id}','abandonnee')`)}</div></div>`,
+        `<div style="margin-top:10px"><strong>${esc(d.texte)}</strong>${d.pourquoi ? `<p class="tiny" style="margin:4px 0 0">${esc(d.pourquoi)}</p>` : ''}${piecesHtml(d)}<p class="tiny" style="margin:4px 0 6px">Demandé le ${esc(String(d.at).slice(0, 10).split('-').reverse().join('/'))}${d.source === 'compte rendu' ? ' · repéré dans un compte rendu de l’agent' : ''}</p><input id="dem-${d.id}" placeholder="Ta réponse (facultatif), par exemple « couverture A »" style="width:100%;margin-bottom:6px"><div class="actions" style="margin-top:0">${btn('C’est fait', `fermerDemande('${t.id}','${d.id}','faite')`, 'good')}${btn('Plus besoin', `fermerDemande('${t.id}','${d.id}','abandonnee')`)}</div></div>`,
     )
     .join('');
-  return `<section class="strip red" style="margin:12px 0"><strong>🙋 ${ds.length > 1 ? ds.length + ' choses attendent' : 'Une chose attend'} ton aide</strong>${rows}</section>`;
+  const accRows = acc
+    .map(
+      ({ idx, ai, a }) =>
+        `<div style="margin-top:10px"><strong>Donner l’accès : ${esc(a.name)}</strong>${a.message ? `<p class="tiny" style="margin:4px 0 6px">${esc(a.message)}</p>` : ''}<div class="actions" style="margin-top:0">${btn('C’est branché', `fermerAcces('${t.id}',${idx},${ai},true)`, 'good')}${btn('Plus besoin', `fermerAcces('${t.id}',${idx},${ai},false)`)}</div></div>`,
+    )
+    .join('');
+  return `<section class="strip red" style="margin:12px 0"><strong>🙋 ${n > 1 ? n + ' choses attendent' : 'Une chose attend'} ton aide</strong>${rows}${accRows}</section>`;
 }
+function fermerAcces(taskId, idx, ai, branche) {
+  const t = task(taskId);
+  const a = t && t.ideas && t.ideas[idx] && (t.ideas[idx].accessRequests || [])[ai];
+  if (!a) return;
+  if (branche) {
+    a.connected = true;
+    a.connectedAt = new Date().toISOString();
+  } else t.ideas[idx].accessRequests.splice(ai, 1);
+  save();
+  render();
+  if (document.getElementById('dialog').open) detail(taskId, true);
+  notify(branche ? 'Accès marqué comme branché : l’agent le verra à son prochain passage.' : 'Demande d’accès retirée.');
+}
+const baseDetailDem = detail;
+detail = function (id, showTools = false) {
+  baseDetailDem(id, showTools);
+  const t = task(id);
+  const body = document.getElementById('dialogbody');
+  if (t && body) body.insertAdjacentHTML('afterbegin', demandesStrip(t));
+};
 function fermerDemande(taskId, demId, statut) {
   const t = task(taskId);
   const d = t && (t.demandes || []).find((x) => x.id === demId);
@@ -365,6 +418,7 @@ function fermerDemande(taskId, demId, statut) {
   if (reponse) d.reponse = reponse.slice(0, 500);
   save();
   render();
+  if (document.getElementById('dialog').open) detail(taskId, true);
   notify(statut === 'faite' ? 'Demande fermée : l’agent le verra à son prochain passage.' : 'Demande retirée.');
 }
 const baseProposalCardDem = proposalCard;
