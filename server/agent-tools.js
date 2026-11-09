@@ -926,7 +926,7 @@ export function createAgentTools({ db, dataDir, onAgentWrite = () => {}, onToolD
     {
       name: 'preparer_depot',
       description:
-        'Donne une adresse à usage unique (30 minutes) pour déposer une image (PNG, JPG, WebP) ou un PDF que Walid doit voir, par exemple deux couvertures à comparer. Envoie le fichier avec : curl -sS -X PUT --data-binary @CHEMIN -H "x-file-name: NOM" ADRESSE. La réponse donne « fichier » : cite-le dans demander_a_walid (pieces). Une adresse par fichier.',
+        'Donne une adresse à usage unique (30 minutes) pour déposer ce que Walid doit voir pour décider : une image (PNG, JPG, WebP, 10 Mo au plus), un PDF (10 Mo), ou une VIDÉO (MP4, MOV, WebM, 300 Mo au plus) — par exemple deux couvertures à comparer, ou un épisode à valider avant publication. Il la regarde directement dans Loop Agent. Envoie le fichier avec : curl -sS -X PUT --data-binary @CHEMIN -H "x-file-name: NOM" ADRESSE. La réponse donne « fichier » : cite-le dans demander_a_walid (pieces). Une adresse par fichier.',
       inputSchema: { type: 'object', properties: { projet: { type: 'string' } }, required: ['projet'] },
       handler(args) {
         findProject(args.projet);

@@ -93,7 +93,7 @@ L'action arrêtée reste visible, avec un bandeau expliquant pourquoi et deux bo
 
 Quand un agent a besoin de Walid (choisir, donner un accès, créer un compte, installer, envoyer), la demande est enregistrée sur l'action (outil `demander_a_walid`, ou automatiquement quand un compte rendu contient « Pour Walid : … » ou « Walid doit … »). **L'action reste rouge et la demande visible jusqu'à ce que Walid la ferme lui-même** (« C'est fait », avec une réponse s'il le faut, ou « Plus besoin »). Valider l'action ou son premier résultat ne la ferme pas. Fermer une demande relance l'agent comme toute décision. **[Décidé le 9 nov. 2026]**
 
-La demande s'affiche en rouge **sur la carte de l'action et tout en haut de son détail**, avec ce que Walid doit regarder pour décider : images ou PDF joints par l'agent (vignettes, clic pour agrandir) ou liens. Les demandes d'accès (signaler_acces) s'y affichent aussi, avec « C'est branché ». **[Décidé le 9 nov. 2026]**
+La demande s'affiche en rouge **sur la carte de l'action et tout en haut de son détail**, avec ce que Walid doit regarder pour décider : images (vignettes, clic pour agrandir), PDF, textes à lire, vidéos (lecteur dans le post-it, MP4/MOV/WebM jusqu'à 300 Mo) ou liens. Les demandes d'accès (signaler_acces) s'y affichent aussi, avec « C'est branché ». **[Décidé le 9 nov. 2026]**
 
 Sur chaque demande, Walid peut aussi **poser une question** à l'agent : la demande reste ouverte et rouge, l'agent doit répondre au début de son tour suivant (`repondre_a_walid`), et l'échange s'affiche sur la demande. Walid la ferme quand il a décidé. **[Décidé le 9 nov. 2026]**
 

@@ -145,3 +145,41 @@ test('un blocage doit être expliqué ; Walid le lève ou abandonne l’idée, e
     s.done();
   }
 });
+
+test('vidéo : dépôt au fil de l’eau, lecture par morceaux (Range), formats inconnus refusés', async () => {
+  const dataDir = mkdtempSync(join(tmpdir(), 'loop-agent-video-'));
+  const db = openDb(dataDir);
+  const server = createServer(createApp({ db, dataDir, passwordHash: hashPassword('mot-de-passe-video-1') }));
+  await new Promise((r) => server.listen(0, '127.0.0.1', r));
+  const base = `http://127.0.0.1:${server.address().port}`;
+  try {
+    const tools = Object.fromEntries(createAgentTools({ db, dataDir }).map((t) => [t.name, t]));
+    const depot = async () => new URL((await tools.preparer_depot.handler({ projet: 'ebook' })).adresse).pathname;
+    // En-tête MP4 (« ftyp » à l'octet 4) + 2 Mo de contenu.
+    const mp4 = Buffer.concat([Buffer.from([0, 0, 0, 0x18]), Buffer.from('ftypisom'), Buffer.alloc(2 * 1024 * 1024, 7)]);
+    const r = await fetch(base + (await depot()), { method: 'PUT', body: mp4, headers: { 'x-file-name': 'episode.mp4' } });
+    assert.equal(r.status, 201);
+    const j = await r.json();
+    assert.equal(j.type, 'video/mp4');
+    assert.equal(j.taille, mp4.length);
+    assert.equal((await fetch(base + (await depot()), { method: 'PUT', body: Buffer.from('rien de connu ici') })).status, 415);
+    // Lecture connectée, par morceaux.
+    const login = await fetch(base + '/api/login', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ password: 'mot-de-passe-video-1' }) });
+    const cookie = (login.headers.get('set-cookie') || '').split(';')[0];
+    const part = await fetch(base + '/api/files/' + j.fichier, { headers: { cookie, range: 'bytes=0-99' } });
+    assert.equal(part.status, 206);
+    assert.equal(part.headers.get('content-range'), `bytes 0-99/${mp4.length}`);
+    assert.equal((await part.arrayBuffer()).byteLength, 100);
+    const all = await fetch(base + '/api/files/' + j.fichier, { headers: { cookie } });
+    assert.equal(all.status, 200);
+    assert.equal(all.headers.get('accept-ranges'), 'bytes');
+    assert.equal((await all.arrayBuffer()).byteLength, mp4.length);
+    // Une image de plus de 10 Mo est refusée (seules les vidéos vont jusqu'à 300 Mo).
+    const grosPng = Buffer.concat([Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]), Buffer.alloc(11 * 1024 * 1024, 1)]);
+    assert.equal((await fetch(base + (await depot()), { method: 'PUT', body: grosPng })).status, 413);
+  } finally {
+    server.close();
+    db.close();
+    rmSync(dataDir, { recursive: true, force: true });
+  }
+});

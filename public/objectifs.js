@@ -363,6 +363,10 @@ function piecesHtml(d) {
         const src = '/api/files/' + encodeURIComponent(p.fichier);
         return `<a href="${src}" target="_blank" rel="noopener" style="display:block;text-decoration:none;color:inherit;max-width:240px"><img src="${src}" alt="${esc(p.titre)}" style="display:block;max-width:240px;max-height:300px;border-radius:8px;border:1px solid var(--line)"><span class="tiny">${esc(p.titre)} · cliquer pour agrandir</span></a>`;
       }
+      if (p.fichier && /^video\//.test(p.type || '')) {
+        const src = '/api/files/' + encodeURIComponent(p.fichier);
+        return `<div style="width:100%;max-width:520px"><video controls preload="metadata" src="${src}" style="display:block;width:100%;border-radius:8px;border:1px solid var(--line);background:#000"></video><span class="tiny">🎬 ${esc(p.titre)} · <a href="${src}" target="_blank" rel="noopener">ouvrir en grand</a></span></div>`;
+      }
       if (p.texte) return `<details style="width:100%;border:1px solid var(--line);border-radius:8px;padding:8px 10px"><summary style="cursor:pointer"><strong>📄 ${esc(p.titre)}</strong> · cliquer pour lire</summary><div style="white-space:pre-line;margin-top:8px">${esc(p.texte)}</div></details>`;
       const href = p.fichier ? '/api/files/' + encodeURIComponent(p.fichier) : p.url;
       return `<a href="${esc(href)}" target="_blank" rel="noopener" class="badge">${esc(p.titre)} ↗</a>`;

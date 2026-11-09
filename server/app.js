@@ -1,5 +1,5 @@
 import { readFile, writeFile, unlink, mkdir } from 'node:fs/promises';
-import { createReadStream } from 'node:fs';
+import { createReadStream, createWriteStream } from 'node:fs';
 import { join, normalize, extname, sep } from 'node:path';
 import { randomBytes } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
@@ -56,6 +56,43 @@ function detectFileType(buf) {
   if (buf.length >= 12 && buf.subarray(0, 4).toString('latin1') === 'RIFF' && buf.subarray(8, 12).toString('latin1') === 'WEBP')
     return { mime: 'image/webp', ext: '.webp' };
   return null;
+}
+
+// Vidéos déposées par les agents (à valider par Walid) : MP4, MOV, WebM.
+const MAX_VIDEO_BYTES = 300 * 1024 * 1024;
+function detectVideoType(buf) {
+  if (buf.length >= 12 && buf.subarray(4, 8).toString('latin1') === 'ftyp')
+    return buf.subarray(8, 12).toString('latin1') === 'qt  ' ? { mime: 'video/quicktime', ext: '.mov' } : { mime: 'video/mp4', ext: '.mp4' };
+  if (buf.length >= 4 && buf.subarray(0, 4).equals(Buffer.from([0x1a, 0x45, 0xdf, 0xa3]))) return { mime: 'video/webm', ext: '.webm' };
+  return null;
+}
+
+// Écrit le corps de la requête sur le disque au fil de l'eau (pas tout en mémoire), avec une limite.
+// Renvoie { taille, debut } (les premiers octets, pour reconnaître le format).
+function streamToFile(req, chemin, limite) {
+  return new Promise((resolve, reject) => {
+    const out = createWriteStream(chemin, { flags: 'wx' });
+    let taille = 0;
+    const debut = [];
+    let lu = 0;
+    req.on('data', (c) => {
+      taille += c.length;
+      if (lu < 16) {
+        debut.push(c.subarray(0, 16 - lu));
+        lu += Math.min(c.length, 16 - lu);
+      }
+      if (taille > limite) {
+        req.destroy();
+        out.destroy();
+        unlink(chemin).catch(() => {});
+        reject(new HttpError(413, `Fichier trop gros (${Math.round(limite / 1048576)} Mo au plus).`));
+      }
+    });
+    req.pipe(out);
+    out.on('finish', () => resolve({ taille, debut: Buffer.concat(debut) }));
+    out.on('error', (e) => (unlink(chemin).catch(() => {}), reject(e)));
+    req.on('error', (e) => (out.destroy(), unlink(chemin).catch(() => {}), reject(e)));
+  });
 }
 
 function parseCookies(header) {
@@ -290,14 +327,27 @@ export function createApp({
       const f = db.getFile(fileMatch[1]);
       if (!f) throw new HttpError(404, 'Fichier introuvable.');
       if (method === 'GET') {
-        res.writeHead(200, {
+        const base = {
           ...SECURITY_HEADERS,
           'Content-Security-Policy': "default-src 'none'; sandbox",
           'Content-Type': f.mime,
-          'Content-Length': f.size,
+          'Accept-Ranges': 'bytes',
           'Content-Disposition': `inline; filename*=UTF-8''${encodeURIComponent(f.name)}`,
           'Cache-Control': 'private, no-store',
-        });
+        };
+        // Lecture par morceaux (Range) : nécessaire pour lire et avancer dans une vidéo (Safari).
+        const m = /^bytes=(\d*)-(\d*)$/.exec(String(req.headers.range || ''));
+        if (m && (m[1] || m[2])) {
+          let start = m[1] ? Number(m[1]) : Math.max(0, f.size - Number(m[2]));
+          let end = m[1] && m[2] ? Math.min(Number(m[2]), f.size - 1) : f.size - 1;
+          if (start > end || start >= f.size) {
+            res.writeHead(416, { ...base, 'Content-Range': `bytes */${f.size}` });
+            return res.end();
+          }
+          res.writeHead(206, { ...base, 'Content-Range': `bytes ${start}-${end}/${f.size}`, 'Content-Length': end - start + 1 });
+          return createReadStream(join(filesDir, f.id), { start, end }).pipe(res);
+        }
+        res.writeHead(200, { ...base, 'Content-Length': f.size });
         return createReadStream(join(filesDir, f.id)).pipe(res);
       }
       if (method === 'DELETE') {
@@ -324,9 +374,6 @@ export function createApp({
       if (depot) {
         if (req.method !== 'PUT' && req.method !== 'POST') throw new HttpError(405, 'PUT uniquement.');
         if (!prendreDepot(depot[1])) throw new HttpError(404, 'Adresse de dépôt inconnue, déjà utilisée ou expirée : redemande-en une avec preparer_depot.');
-        const buf = await readBody(req, MAX_FILE_BYTES);
-        const type = detectFileType(buf);
-        if (!type) throw new HttpError(415, 'Format accepté : PDF, PNG, JPG ou WebP.');
         let name = 'piece';
         try {
           name = decodeURIComponent(String(req.headers['x-file-name'] || 'piece'));
@@ -334,9 +381,18 @@ export function createApp({
         name = name.replace(/[\u0000-\u001f\\/]/g, '_').slice(0, 160) || 'piece';
         const id = randomBytes(12).toString('hex');
         await mkdir(filesDir, { recursive: true });
-        await writeFile(join(filesDir, id), buf, { flag: 'wx' });
-        db.addFile({ id, name, mime: type.mime, size: buf.length });
-        return send(res, 201, { fichier: id, nom: name, type: type.mime, taille: buf.length, suite: 'Cite ce fichier dans demander_a_walid (pieces : [{ "titre": "…", "fichier": "' + id + '" }]).' });
+        const { taille, debut } = await streamToFile(req, join(filesDir, id), MAX_VIDEO_BYTES);
+        const type = detectFileType(debut) || detectVideoType(debut);
+        if (!type) {
+          await unlink(join(filesDir, id)).catch(() => {});
+          throw new HttpError(415, 'Format accepté : PDF, PNG, JPG, WebP, ou vidéo MP4, MOV, WebM.');
+        }
+        if (!type.mime.startsWith('video/') && taille > MAX_FILE_BYTES) {
+          await unlink(join(filesDir, id)).catch(() => {});
+          throw new HttpError(413, 'Image ou PDF trop gros (10 Mo au plus).');
+        }
+        db.addFile({ id, name, mime: type.mime, size: taille });
+        return send(res, 201, { fichier: id, nom: name, type: type.mime, taille, suite: 'Cite ce fichier dans demander_a_walid (pieces : [{ "titre": "…", "fichier": "' + id + '" }]).' });
       }
       // Relevé chiffré de la prospection Nūr Meet, envoyé chaque heure par le serveur de Nūr (jeton).
       if (path === RELEVE_NOUR_ROUTE) {
