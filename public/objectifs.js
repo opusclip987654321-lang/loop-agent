@@ -338,5 +338,48 @@ taskColor = function (t) {
   return baseTaskColorFirst(t);
 };
 
+// Demandes à Walid (règle du 09/11/2026) : ce dont l'agent a besoin reste affiché, et l'action
+// rouge, jusqu'à ce que Walid ferme la demande lui-même. Valider l'action ne la ferme pas.
+function demandesOuvertes(t) {
+  return (t.demandes || []).filter((d) => d.statut === 'ouverte');
+}
+function demandesStrip(t) {
+  const ds = demandesOuvertes(t);
+  if (!ds.length) return '';
+  const rows = ds
+    .map(
+      (d) =>
+        `<div style="margin-top:10px"><strong>${esc(d.texte)}</strong>${d.pourquoi ? `<p class="tiny" style="margin:4px 0 0">${esc(d.pourquoi)}</p>` : ''}<p class="tiny" style="margin:4px 0 6px">Demandé le ${esc(String(d.at).slice(0, 10).split('-').reverse().join('/'))}${d.source === 'compte rendu' ? ' · repéré dans un compte rendu de l’agent' : ''}</p><input id="dem-${d.id}" placeholder="Ta réponse (facultatif), par exemple « couverture A »" style="width:100%;margin-bottom:6px"><div class="actions" style="margin-top:0">${btn('C’est fait', `fermerDemande('${t.id}','${d.id}','faite')`, 'good')}${btn('Plus besoin', `fermerDemande('${t.id}','${d.id}','abandonnee')`)}</div></div>`,
+    )
+    .join('');
+  return `<section class="strip red" style="margin:12px 0"><strong>🙋 ${ds.length > 1 ? ds.length + ' choses attendent' : 'Une chose attend'} ton aide</strong>${rows}</section>`;
+}
+function fermerDemande(taskId, demId, statut) {
+  const t = task(taskId);
+  const d = t && (t.demandes || []).find((x) => x.id === demId);
+  if (!d) return;
+  const input = document.getElementById('dem-' + demId);
+  const reponse = input && input.value.trim();
+  d.statut = statut;
+  d.fermeeLe = new Date().toISOString();
+  if (reponse) d.reponse = reponse.slice(0, 500);
+  save();
+  render();
+  notify(statut === 'faite' ? 'Demande fermée : l’agent le verra à son prochain passage.' : 'Demande retirée.');
+}
+const baseProposalCardDem = proposalCard;
+proposalCard = function (t) {
+  return demandesStrip(t) + baseProposalCardDem(t);
+};
+const baseIdeaAccessRowsDem = ideaAccessRows;
+ideaAccessRows = function (t) {
+  return demandesStrip(t) + baseIdeaAccessRowsDem(t);
+};
+const baseTaskColorDem = taskColor;
+taskColor = function (t) {
+  if (t.status !== 'En pause' && demandesOuvertes(t).length) return 'rouge';
+  return baseTaskColorDem(t);
+};
+
 // Premier affichage avec les objectifs.
 render();

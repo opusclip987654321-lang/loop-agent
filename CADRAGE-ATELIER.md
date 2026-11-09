@@ -89,6 +89,10 @@ Quand l'agent modifie une action déjà autonome, **elle retombe en « à valide
 
 L'action arrêtée reste visible, avec un bandeau expliquant pourquoi et deux boutons : valider la modification, ou refuser et reprendre l'ancienne version. **[Décidé]**
 
+### Demandes à Walid
+
+Quand un agent a besoin de Walid (choisir, donner un accès, créer un compte, installer, envoyer), la demande est enregistrée sur l'action (outil `demander_a_walid`, ou automatiquement quand un compte rendu contient « Pour Walid : … » ou « Walid doit … »). **L'action reste rouge et la demande visible jusqu'à ce que Walid la ferme lui-même** (« C'est fait », avec une réponse s'il le faut, ou « Plus besoin »). Valider l'action ou son premier résultat ne la ferme pas. Fermer une demande relance l'agent comme toute décision. **[Décidé le 9 nov. 2026]**
+
 ### Relance de l'agent après une décision
 
 Quand Walid valide, refuse ou répond (proposition, modification, premier résultat, idée, indicateur, action ajoutée, reprise après pause), Loop Agent **relance la routine Claude du projet** par son déclencheur « API », avec la liste des décisions. **Au plus une fois toutes les 30 minutes par projet** ; une décision prise pendant ce délai part à la fin du délai. Seuls les projets dont l'agent tourne en routine, et dont le jeton a été rangé sur le serveur, sont relancés. Le tour consomme l'abonnement Claude, pas l'API. Un message Telegram signale chaque relance, ou l'échec d'une relance. **[Décidé le 7 nov. 2026]**

@@ -46,6 +46,8 @@ export function describeEvent(tool, args = {}) {
       return { line: `🔴 Indicateur à valider : ${short(args.nom, 100)}`, needsOk: true };
     case 'ecrire_bilan':
       return { line: `📈 Bilan ${args.periode_type} ${args.periode} écrit`, needsOk: false };
+    case 'demander_a_walid':
+      return { line: `🔴 Demande à Walid (${args.projet}) : ${short(args.demande, 200)}`, needsOk: true };
     case 'enregistrer_depense':
       return { line: `💶 Dépense notée : ${short(args.nom, 80)} — ${args.montant} ${args.devise || ''} / ${args.frequence || ''}${args.estimation ? ' (estimation)' : ''}`, needsOk: false };
     case 'enregistrer_facture':

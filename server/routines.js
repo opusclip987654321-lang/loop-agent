@@ -50,6 +50,12 @@ export function decisionsBetween(oldValue, newValue) {
     if (o.status === 'En attente de validation Walid' && t.status !== 'En attente de validation Walid')
       out.push(`« ${name} » : ${t.status || 'décidée'}`);
     if ((o.paused && !t.paused) || (o.status === 'En pause' && t.status !== 'En pause')) out.push(`« ${name} » reprend après la pause`);
+    const oldDem = new Map((Array.isArray(o.demandes) ? o.demandes : []).map((d) => [d.id, d]));
+    for (const d of Array.isArray(t.demandes) ? t.demandes : []) {
+      const before = oldDem.get(d.id);
+      if (before && before.statut === 'ouverte' && d.statut !== 'ouverte')
+        out.push(`demande « ${short(d.texte, 80)} » sur « ${name} » : ${d.statut === 'faite' ? 'faite' : 'plus besoin'}${d.reponse ? ` (réponse de Walid : « ${short(d.reponse, 160)} »)` : ''}`);
+    }
     const oldIdeas = Array.isArray(o.ideas) ? o.ideas : [];
     (Array.isArray(t.ideas) ? t.ideas : []).forEach((idea, i) => {
       if (!idea || typeof idea !== 'object') return;

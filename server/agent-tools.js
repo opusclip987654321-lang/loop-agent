@@ -108,8 +108,39 @@ function ideaColor(i) {
   if (i.errorState) return 'rouge';
   return 'vert';
 }
+// Demandes à Walid (règle de Walid du 09/11/2026) : ce dont l'agent a besoin de lui reste
+// ouvert, et l'action reste rouge, jusqu'à ce que Walid la ferme lui-même (« C'est fait » ou
+// « Plus besoin »). Valider l'action ou son premier résultat ne la ferme pas.
+const norm = (s) => String(s || '').toLowerCase().replace(/\s+/g, ' ').replace(/[«»"'’.!?:;,]/g, '').trim();
+export function demandesOuvertes(t) {
+  return (t.demandes || []).filter((d) => d.statut === 'ouverte');
+}
+export function ouvrirDemande(t, texte, { source = 'agent', pourquoi = '' } = {}) {
+  const tx = String(texte || '').replace(/\s+/g, ' ').trim().slice(0, 300);
+  if (tx.length < 5) return null;
+  t.demandes = t.demandes || [];
+  // Pas de doublon : même demande encore ouverte, ou fermée il y a moins de 14 jours.
+  const recent = Date.now() - 14 * 86400000;
+  if (t.demandes.some((d) => norm(d.texte) === norm(tx) && (d.statut === 'ouverte' || Date.parse(d.fermeeLe || d.at) > recent))) return null;
+  const d = { id: uid('dem'), texte: tx, pourquoi: String(pourquoi || '').slice(0, 500) || undefined, source, at: nowIso(), statut: 'ouverte' };
+  t.demandes.unshift(d);
+  return d;
+}
+// Filet : une phrase « Pour Walid : … » ou « Walid doit … » écrite dans un compte rendu
+// devient une demande, même si l'agent n'a pas utilisé demander_a_walid.
+export function demandesDansTexte(...textes) {
+  const out = [];
+  for (const s of textes) {
+    const t = String(s || '');
+    for (const m of t.matchAll(/(?<![Ff]ait )\b[Pp]our Walid\s*:\s*([^\n]+?)(?=(?<=[.!?])\s|\n|$)/g)) out.push(m[1]);
+    for (const m of t.matchAll(/\bWalid doit ([^\n]+?)(?=(?<=[.!?])\s|\n|$)/g)) out.push('Walid doit ' + m[1]);
+  }
+  return [...new Set(out.map((x) => x.trim()))];
+}
+
 function taskColor(t) {
   if (t.status === 'En pause') return 'gris';
+  if (demandesOuvertes(t).length) return 'rouge';
   if (t.proposalStatus === 'pending' || t.stopped || t.firstRunPending) return 'rouge';
   if ((t.ideas || []).some((i) => typeof i === 'object' && ideaColor(i) === 'rouge')) return 'rouge';
   if (t.status === 'En attente de validation Walid') return 'rouge';
@@ -353,6 +384,7 @@ export function createAgentTools({ db, dataDir, onAgentWrite = () => {}, onToolD
               reponse_walid_le: (i.walidReply && i.walidReplyAt) || undefined,
               acces_manquants: (i.accessRequests || []).filter((a) => !a.connected).map((a) => a.name),
             })),
+            demandes_a_walid: (t.demandes || []).slice(0, 10).map((d) => ({ id: d.id, demande: d.texte, statut: d.statut, depuis: d.at, fermee_le: d.fermeeLe || undefined, reponse_walid: d.reponse || undefined })),
             derniers_tours: (t.reviewHistory || []).slice(0, 3),
             messages_de_walid: (t.reviewConversation || []).filter((m) => m.role === 'Walid').slice(-5),
           })),
@@ -429,6 +461,9 @@ export function createAgentTools({ db, dataDir, onAgentWrite = () => {}, onToolD
           };
           (t.reviewHistory = t.reviewHistory || []).unshift(entry);
           t.lastAgentTurn = entry.at;
+          const auto = demandesDansTexte(entry.aiObservation, entry.aiDecision, entry.plan)
+            .map((x) => ouvrirDemande(t, x, { source: 'compte rendu' }))
+            .filter(Boolean);
           if (args.statut) t.status = text(args.statut, 'statut', { max: 80 });
           if (args.terminee === true) {
             if (t.type !== 'Ponctuelle') throw new ToolError('Seule une action ponctuelle peut être terminée ; une boucle ne se termine jamais.');
@@ -449,12 +484,13 @@ export function createAgentTools({ db, dataDir, onAgentWrite = () => {}, onToolD
             if (u.commentaire !== undefined) idea.agentComment = text(u.commentaire, 'commentaire', { required: false });
             if (u.erreur !== undefined) idea.errorState = text(u.erreur, 'erreur', { required: false }) || undefined;
           }
+          const note = auto.length ? ` ${auto.length} demande(s) à Walid enregistrée(s) d’après ton texte : elles restent ouvertes jusqu’à ce qu’il les ferme.` : '';
           if (firstRun && !t.done) {
             t.firstRunPending = true;
             t.firstRunAt = entry.at;
-            return `Premier tour enregistré sur « ${t.title} » : Walid doit valider ce premier résultat avant que l’action continue. Explique-lui clairement ce que tu as fait et ce que tu proposes pour la suite (dans constat, decision et suite).`;
+            return `Premier tour enregistré sur « ${t.title} » : Walid doit valider ce premier résultat avant que l’action continue. Explique-lui clairement ce que tu as fait et ce que tu proposes pour la suite (dans constat, decision et suite).${note}`;
           }
-          return `Tour enregistré sur « ${t.title} ».`;
+          return `Tour enregistré sur « ${t.title} ».${note}`;
         });
       },
     },
@@ -800,6 +836,28 @@ export function createAgentTools({ db, dataDir, onAgentWrite = () => {}, onToolD
       },
     },
     {
+      name: 'demander_a_walid',
+      description:
+        'Quand tu as besoin que Walid fasse ou décide quelque chose (choisir, donner un accès, créer un compte, installer, envoyer, répondre) : enregistre la demande ici. L’action reste rouge et la demande visible jusqu’à ce que Walid la ferme lui-même ; valider l’action ne la ferme pas. Une seule chose par demande, en une phrase simple. Lis la suite dans lire_projet → demandes_a_walid.',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          projet: { type: 'string' },
+          action: { type: 'string' },
+          demande: { type: 'string', description: 'Ce que Walid doit faire, en une phrase simple (ex. « Choisir la couverture A ou D »).' },
+          pourquoi: { type: 'string', description: 'Pourquoi c’est nécessaire, et ce qui est bloqué en attendant.' },
+        },
+        required: ['projet', 'action', 'demande'],
+      },
+      handler(args) {
+        return mutateProject(args.projet, agentName(args), (doc) => {
+          const t = findTask(doc, args.action);
+          const d = ouvrirDemande(t, text(args.demande, 'demande', { max: 300 }), { source: 'agent', pourquoi: text(args.pourquoi, 'pourquoi', { max: 500, required: false }) });
+          return d ? `Demande enregistrée : « ${d.texte} ». Elle reste ouverte jusqu’à ce que Walid la ferme.` : 'Cette demande est déjà ouverte (ou vient d’être fermée par Walid) : rien de nouveau.';
+        });
+      },
+    },
+    {
       name: 'signaler_acces',
       description: 'Signale qu’une idée a besoin d’un accès à un outil (Gmail, Google Analytics, Meta…) : l’idée passe au rouge. Rappelle avec branche=true quand l’accès fonctionne.',
       inputSchema: {
@@ -1014,5 +1072,5 @@ export const CONNECTOR_INSTRUCTIONS = `Loop Agent est le tableau de bord des bou
 9. Lis les règles d'or du projet (regles dans lire_projet) : ce sont des décisions de Walid.
 10. Résultats : propose 3 à 6 indicateurs clés par projet (proposer_indicateur) s'il n'y en a pas ; mesure les indicateurs validés à chaque tour (enregistrer_indicateur) ; écris les bilans dus (lire_projet → bilans_a_ecrire) avec ecrire_bilan : pourquoi on a progressé ou reculé par rapport à la période précédente, et l'action qui a changé la donne.
 11. Argent : quand tu connais une dépense réelle du projet (abonnement, recharge, API facturée), note-la avec enregistrer_depense et sa source ; un montant calculé se marque estimation:true. Le coût affiché d'une session Claude n'est pas une dépense. Tu n'engages jamais de dépense nouvelle sans l'accord de Walid.
-12. Quand Walid doit faire quelque chose (donner un accès, créer un compte, installer, envoyer) : enregistre-le avec signaler_acces (accès à un outil) ou dans une proposition (proposer_action / proposer_idee). Une simple phrase « Pour Walid : … » dans un compte rendu ne suffit pas : elle disparaît de sa vue dès qu'il valide.
+12. Quand Walid doit faire ou décider quelque chose (choisir, donner un accès, créer un compte, installer, envoyer) : demander_a_walid (ou signaler_acces pour un accès à un outil). La demande reste ouverte et l'action rouge jusqu'à ce que Walid la ferme. Une phrase « Pour Walid : … » écrite dans un compte rendu est rattrapée automatiquement, mais utilise l'outil : une chose par demande, en une phrase simple.
 Jamais de mot de passe, de clé ni de jeton dans ce que tu écris.`;
