@@ -117,6 +117,10 @@ Reprise du cerveau central (09/11/2026). Le relevé horaire du serveur Nūr envo
 
 Avant l'arrêt du cerveau central, l'historique tenu dans Notion « Loops des projets » est recopié dans chaque projet : décisions et leçons datées (« 📜 Décisions des loops », 129 lignes), page complète de chaque projet (« 🧠 Mes projets »), règles des loops et revue hebdo du système (projet Gestion), lignes « ✅ Fait pour Walid ». Les agents le lisent dans `lire_projet` → `archive_notion` (`server/archive-notion.js`). Notion n'est ni modifié ni effacé. Export en lecture seule sur le serveur Nūr, import dans Loop Agent : `ssh ubuntu@57.131.152.36 'python3 -' < scripts/notion-export.py | ssh loop-agent-vps 'docker exec -i loop-agent node scripts/import-notion.js'` (relançable).
 
+## Relevé Google Search Console (vegebudget.fr, leviaro.fr)
+
+Accès donné par Walid le 09/11/2026 : le compte de service Google `loop-agent@loop-agent-514221.iam.gserviceaccount.com` (projet Google Cloud « loop agent », API Search Console activée) est utilisateur « Restreint » des sites dans Search Console. Toutes les 6 heures (`server/releve-search-console.js`), Loop Agent lit en lecture seule les clics et affichages Google par jour (30 jours, réécrits car Google a 2 à 3 jours de retard) → indicateurs « Visites venues de Google » ou « Clics depuis Google » et « Affichages dans Google » ; plus les 15 requêtes et 10 pages principales sur 28 jours → `lire_projet` → `search_console`. La demande d'accès Search Console de l'agent se ferme seule. Clé dans `/data/search-console.json` (droits 600), rangée depuis le Mac sans jamais l'afficher ; `node scripts/search-console.js essai | retirer`.
+
 ## Données
 
 Volume Docker `loop-agent_loop_agent_data` : `loop-agent.sqlite` (tout) et `files/` (factures).

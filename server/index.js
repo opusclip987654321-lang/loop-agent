@@ -13,6 +13,7 @@ import { createNourVeille } from './nour-veille.js';
 import { createReleveVegebudget } from './releve-vegebudget.js';
 import { createReleveImpacteur } from './releve-impacteur.js';
 import { createRelevePatreon } from './releve-patreon.js';
+import { createReleveSearchConsole } from './releve-search-console.js';
 
 const config = {
   port: Number(process.env.PORT || 3000),
@@ -94,6 +95,8 @@ const stopImpacteur = createReleveImpacteur({ db, dataDir: config.dataDir }).sta
 
 // Membres Patreon d'Impacteur Communauté, toutes les 3 heures. Sans accès rangé, ne fait rien.
 const stopPatreon = createRelevePatreon({ db, dataDir: config.dataDir }).start();
+// Search Console (vegebudget.fr, leviaro.fr), toutes les 6 heures. Sans clé rangée, ne fait rien.
+const stopSearchConsole = createReleveSearchConsole({ db, dataDir: config.dataDir }).start();
 
 const stopBackups = scheduleBackups({
   db,
@@ -121,6 +124,7 @@ function shutdown() {
   stopVegebudget();
   stopImpacteur();
   stopPatreon();
+  stopSearchConsole();
   stopBackups();
   server.close(() => {
     db.close();
