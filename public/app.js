@@ -315,7 +315,7 @@ function head(title, desc, action = '') {
 }
 function cardTask(t) {
   let proposal = stopBanner(t) + proposalCard(t);
-  return `<article class="card ${taskColor(t) === 'rouge' ? 'cred' : taskColor(t) === 'gris' ? 'cgrey' : 'cgreen'}"><div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap"><span class="tiny">${colorDot(taskColor(t))}${t.origin === 'Walid' ? 'Ajouté par Walid' : 'Proposé par ' + esc(t.origin)}</span><div class="toolbar" style="margin:0">${pill(t.status)}<span class="badge">${t.type === 'Boucle' ? '🔁 Boucle' : '● Ponctuelle'}</span>${autonomyBadge(t)}<span class="badge gold">${esc(t.category || 'À classer')}</span></div></div><h3>${esc(t.title)}</h3><p class="muted">${esc(t.goal)}</p>${t.targetFollowers ? `<p><strong>Cible :</strong> ${Number(t.targetFollowers).toLocaleString('fr-FR')} abonnés</p>` : ''}${proposal}<div class="meta"><div><span>Responsable</span>${esc(t.owner)}</div><div><span>Révision prévue</span>${esc(t.reviewCadence || (t.type === 'Ponctuelle' || t.format ? 'Chaque jour' : 'Chaque lundi'))}</div></div><div class="actions">${btn('Ouvrir l’action ↗', "detail('TID')".replace('TID', t.id))}</div></article>`;
+  return `<article class="card ${taskColor(t) === 'rouge' ? 'cred' : taskColor(t) === 'gris' ? 'cgrey' : 'cgreen'}"><div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap"><span class="tiny">${colorDot(taskColor(t))}${t.origin === 'Walid' ? 'Ajouté par Walid' : 'Proposé par ' + esc(t.origin)}${raisonsRouge(t)}</span><div class="toolbar" style="margin:0">${pill(t.status)}<span class="badge">${t.type === 'Boucle' ? '🔁 Boucle' : '● Ponctuelle'}</span>${autonomyBadge(t)}<span class="badge gold">${esc(t.category || 'À classer')}</span></div></div><h3>${esc(t.title)}</h3><p class="muted">${esc(t.goal)}</p>${t.targetFollowers ? `<p><strong>Cible :</strong> ${Number(t.targetFollowers).toLocaleString('fr-FR')} abonnés</p>` : ''}${proposal}<div class="meta"><div><span>Responsable</span>${esc(t.owner)}</div><div><span>Révision prévue</span>${esc(t.reviewCadence || (t.type === 'Ponctuelle' || t.format ? 'Chaque jour' : 'Chaque lundi'))}</div></div><div class="actions">${btn('Ouvrir l’action ↗', "detail('TID')".replace('TID', t.id))}</div></article>`;
 }
 function setTaskProposal(id, approved) {
   let t = task(id);
@@ -1928,3 +1928,26 @@ window.addEventListener('hashchange', () => {
 });
 save();
 render();
+
+// Pourquoi une action est rouge, en mots simples (décidé avec Walid le 09/11/2026) :
+// « L'agent attend ta validation » (il propose ou a fait un premier essai, Walid tranche),
+// « L'agent a besoin de toi » (Walid doit faire quelque chose), « L'agent est bloqué »
+// (quelque chose l'empêche d'avancer). Même phrase sur les actions de l'agent et celles de Walid.
+function raisonsRouge(t) {
+  if (!t || t.status === 'En pause') return '';
+  const ideas = (t.ideas || []).filter((i) => i && typeof i === 'object');
+  const r = [];
+  if (
+    t.proposalStatus === 'pending' ||
+    isStopped(t) ||
+    t.firstRunPending ||
+    t.status === 'En attente de validation Walid' ||
+    ideas.some((i) => i.source === 'IA' && i.approvalStatus === 'pending')
+  )
+    r.push('attend ta validation');
+  if ((t.demandes || []).some((d) => d.statut === 'ouverte') || ideas.some((i) => (i.accessRequests || []).some((a) => !a.connected))) r.push('a besoin de toi');
+  if (ideas.some((i) => i.errorState)) r.push('est bloqué');
+  if (!r.length) return '';
+  const phrase = r.length === 1 ? r[0] : r.slice(0, -1).join(', ') + ' et ' + r[r.length - 1];
+  return ` · <strong style="color:var(--red)">L’agent ${phrase}</strong>`;
+}
