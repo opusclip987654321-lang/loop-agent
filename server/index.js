@@ -10,6 +10,7 @@ import { createArgentRappels } from './argent-rappels.js';
 import { createBoites } from './boites.js';
 import { createSeo } from './seo.js';
 import { createNourVeille } from './nour-veille.js';
+import { createReleveVegebudget } from './releve-vegebudget.js';
 
 const config = {
   port: Number(process.env.PORT || 3000),
@@ -79,6 +80,9 @@ const stopSeo = createSeo({ db, dataDir: config.dataDir, notify: (t) => (notifie
 // Veille quotidienne de la prospection Nūr Meet (11 h) : Telegram seulement en cas de problème.
 const stopVeilleNour = notifier.enabled ? createNourVeille({ db, dataDir: config.dataDir, notify: (t) => notifier.send(t) }).start() : () => {};
 
+// Chiffres de vegebudget.fr (visiteurs, inscriptions, abonnés), chaque heure. Sans jeton rangé, ne fait rien.
+const stopVegebudget = createReleveVegebudget({ db, dataDir: config.dataDir }).start();
+
 const stopBackups = scheduleBackups({
   db,
   dataDir: config.dataDir,
@@ -102,6 +106,7 @@ function shutdown() {
   stopBoites();
   stopSeo();
   stopVeilleNour();
+  stopVegebudget();
   stopBackups();
   server.close(() => {
     db.close();

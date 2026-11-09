@@ -97,6 +97,10 @@ Chaque heure, `scripts/nour-meet-releve.py` (installé sur le VPS Nūr dans `~/o
 
 Chaque dimanche à partir de 8 h (Paris), Loop Agent contrôle nourmeet.com, vegebudget.fr et leviaro.fr comme Google, sans IA (`server/seo.js`, mêmes 17 contrôles et poids que le cerveau central) : note sur 100, actions possibles par importance. Le résultat est rangé dans chaque projet (26 semaines), lisible par les agents dans `lire_projet` (champ `seo`), et résumé sur Telegram.
 
+## Relevé de vegebudget.fr
+
+Chaque heure, Loop Agent lit `https://vegebudget.fr/api/stats` (jeton dans `/data/vegebudget.json`, droits 600, rangé par `scripts/vegebudget-jeton.js ranger`, jamais affiché) et remplit les indicateurs visites et inscriptions (par jour) et abonnés payants (total du jour) du projet vegebudget. Reprise du cerveau central.
+
 ## Données
 
 Volume Docker `loop-agent_loop_agent_data` : `loop-agent.sqlite` (tout) et `files/` (factures).
