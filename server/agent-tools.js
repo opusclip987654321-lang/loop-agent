@@ -1083,11 +1083,12 @@ export function createAgentTools({ db, dataDir, onAgentWrite = () => {}, onToolD
         if (findProject(args.projet).id !== 'nourmeet') throw new ToolError('Le tri des réponses ne concerne que le projet nourmeet.');
         const at = nowIso();
         const nouvelles = mutate(tri.KEY, () => ({ aTrier: {}, triees: {} }), (etat) => tri.noterTri(etat, args.reponses, at), 'agent:nourmeet');
-        if (!nouvelles.length) return 'Aucune réponse enregistrée : clés inconnues ou déjà triées (relis reponses_a_trier).';
+        if (!nouvelles.length && !Object.values(tri.lireEtat(db).triees).some((x) => tri.POSITIFS.has(x.type) && !x.demandee))
+          return 'Aucune réponse enregistrée : clés inconnues ou déjà triées (relis reponses_a_trier).';
         const etat = tri.lireEtat(db);
         const parJour = tri.positifsParJour(etat);
-        const recent = new Date(Date.now() - 7 * 86400000).toISOString().slice(0, 10);
         const ouvertes = [];
+        const demandees = [];
         mutateProject('nourmeet', 'agent:nourmeet', (doc) => {
           const kpi = (doc.kpis || []).find((k) => k.status === 'valide' && /réponses intéressées/i.test(k.name));
           if (kpi) {
@@ -1099,17 +1100,26 @@ export function createAgentTools({ db, dataDir, onAgentWrite = () => {}, onToolD
           }
           const t = (doc.tasks || []).find((x) => x.id === tri.ACTION);
           if (!t) return;
-          for (const r of nouvelles.filter((x) => tri.POSITIFS.has(x.type) && x.jour >= recent)) {
+          // Toutes les réponses positives, même anciennes, tant qu'aucune demande n'a été ouverte
+          // pour elles (décision de Walid du 09/11 : ne jamais supposer qu'il a déjà répondu).
+          const textes = new Map(nouvelles.map((x) => [x.cle, x]));
+          const aDemander = Object.entries(etat.triees)
+            .filter(([, x]) => tri.POSITIFS.has(x.type) && !x.demandee)
+            .map(([cle, x]) => ({ ...x, cle, objet: textes.get(cle)?.objet, texte: textes.get(cle)?.texte }));
+          for (const r of aDemander) {
             const qui = r.nom || 'Un restaurant';
             const d = ouvrirDemande(t, `Répondre à ${qui}${r.ville ? ' (' + r.ville + ')' : ''} : ${r.type === 'INTERESSE' ? 'intéressé' : 'pose une question'} — ${r.resume}`, {
               source: 'agent',
               pourquoi: `Ce restaurant a répondu le ${r.jour.split('-').reverse().join('/')} au mail de prospection. Un restaurant qui montre de l'intérêt attend une réponse rapide, sinon il passe à autre chose. Réponds-lui depuis contact@nourmeet.com : son mail complet, avec ses coordonnées, est dans cette boîte.`,
             });
+            demandees.push(r.cle);
             if (!d) continue;
             if (r.texte || r.objet) d.pieces = [{ titre: 'Sa réponse (adresse et téléphone masqués)', texte: `Objet : ${r.objet || '—'}\n\n${r.texte || ''}` }];
             ouvertes.push(d.texte);
           }
         });
+        if (demandees.length)
+          mutate(tri.KEY, () => ({ aTrier: {}, triees: {} }), (e) => demandees.forEach((c) => e.triees[c] && (e.triees[c].demandee = true)), 'agent:nourmeet');
         for (const texte of ouvertes) onToolDone('agent:nourmeet', 'demander_a_walid', { projet: 'nourmeet', demande: texte });
         const types = {};
         for (const r of nouvelles) types[r.type] = (types[r.type] || 0) + 1;

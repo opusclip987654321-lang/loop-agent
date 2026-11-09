@@ -32,23 +32,26 @@ test('tri : un intéressé devient une demande à Walid, le texte est effacé, l
     assert.equal(enregistrerATrier(db, nettoyerReponses([
       { cle: cle1, jour: today, nom: 'Le Bistrot', ville: 'Paris', objet: 'Re: soirées', texte: 'Intéressé, appelez le 0612345678' },
       { cle: cle2, jour: today, objet: 'Absence', texte: 'Je suis absent' },
-    ]), today), 2);
+      { cle: '3'.repeat(16), jour: '2026-10-01', nom: 'Vieux Resto', objet: 'Re: soirées', texte: 'Combien ça coûte ?' },
+    ]), today), 3);
     assert.equal(enregistrerATrier(db, nettoyerReponses([{ cle: cle1, jour: today, texte: 'x' }]), today), 0);
     const p = await tools.lire_projet.handler({ projet: 'nourmeet' });
-    assert.equal(p.reponses_restaurants.a_trier, 2);
+    assert.equal(p.reponses_restaurants.a_trier, 3);
     const a = await tools.reponses_a_trier.handler({ projet: 'nourmeet' });
-    assert.equal(a.reponses.length, 2);
+    assert.equal(a.reponses.length, 3);
     assert.ok(!JSON.stringify(a).includes('0612345678'));
     const msg = await tools.trier_reponses.handler({ projet: 'nourmeet', reponses: [
       { cle: cle1, type: 'INTERESSE', resume: 'Veut être rappelé pour en parler.' },
       { cle: cle2, type: 'AUTOMATIQUE', resume: 'Message d’absence.' },
+      { cle: '3'.repeat(16), type: 'QUESTION', resume: 'Demande le prix.' },
     ] });
-    assert.match(msg, /2 réponse\(s\) triée\(s\).*1 demande/);
+    assert.match(msg, /3 réponse\(s\) triée\(s\).*2 demande/);
     const apres = JSON.parse(db.getDoc('project:nourmeet').value);
     const t = apres.tasks.find((x) => x.id === 'nourmeet-mails');
-    assert.equal(t.demandes.length, 1);
-    assert.match(t.demandes[0].texte, /Le Bistrot/);
-    assert.match(t.demandes[0].pieces[0].texte, /\[téléphone masqué\]/);
+    assert.equal(t.demandes.length, 2);
+    assert.ok(t.demandes.some((d) => /Vieux Resto/.test(d.texte)));
+    const bistrot = t.demandes.find((d) => /Le Bistrot/.test(d.texte));
+    assert.match(bistrot.pieces[0].texte, /\[téléphone masqué\]/);
     assert.equal(apres.kpiValues.find((v) => v.kpi === 'kpi-int' && v.date === today).value, 1);
     assert.ok(events.some((e) => e[1] === 'demander_a_walid'));
     const etat = JSON.parse(db.getDoc('nour-reponses').value);

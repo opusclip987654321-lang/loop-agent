@@ -1,7 +1,7 @@
 // Tri des réponses des restaurants à la prospection Nūr Meet (reprise du cerveau central,
 // décision de Walid du 09/11/2026).
 // 1. Le relevé horaire du serveur Nūr (scripts/nour-meet-releve.py) envoie les réponses reçues
-//    (np_reponses de n8n), coupées avant la citation du mail d'origine, adresses et téléphones
+//    (np_reponses de n8n, toutes depuis le début), coupées avant la citation du mail d'origine, adresses et téléphones
 //    masqués. Elles attendent ici, dans le document « nour-reponses ».
 // 2. Une tâche Claude (abonnement) les lit avec reponses_a_trier et les classe avec trier_reponses,
 //    avec la même consigne que le cerveau. Après le tri, le texte est effacé : il ne reste que
@@ -46,7 +46,7 @@ const str = (v, max) => (typeof v === 'string' && v.trim() ? masquer(v).trim().s
 export function nettoyerReponses(list) {
   if (!Array.isArray(list)) return [];
   const out = [];
-  for (const r of list.slice(0, 80)) {
+  for (const r of list.slice(0, 200)) {
     if (!r || !CLE.test(String(r.cle)) || !JOUR.test(String(r.jour))) continue;
     const texte = str(r.texte, 800);
     const objet = str(r.objet, 150);
@@ -58,7 +58,7 @@ export function nettoyerReponses(list) {
 
 const vide = () => ({ aTrier: {}, triees: {} });
 
-// Ajoute les réponses pas encore connues ; oublie les textes non triés de plus de 30 jours.
+// Ajoute les réponses pas encore connues ; oublie les textes non triés de plus d'un an.
 export function ajouterATrier(etat, reponses, today) {
   etat.aTrier = etat.aTrier || {};
   etat.triees = etat.triees || {};
@@ -68,7 +68,7 @@ export function ajouterATrier(etat, reponses, today) {
     etat.aTrier[r.cle] = r;
     n++;
   }
-  const limite = new Date(Date.parse(today + 'T12:00:00Z') - 30 * 86400000).toISOString().slice(0, 10);
+  const limite = new Date(Date.parse(today + 'T12:00:00Z') - 365 * 86400000).toISOString().slice(0, 10);
   for (const [k, r] of Object.entries(etat.aTrier)) if (r.jour < limite) delete etat.aTrier[k];
   return n;
 }

@@ -107,7 +107,7 @@ Toutes les 3 heures, Loop Agent lit en lecture seule les membres de la campagne 
 
 ## Tri des réponses des restaurants (Nūr Meet)
 
-Le relevé horaire du serveur Nūr envoie aussi les réponses des restaurants des 21 derniers jours (n8n np_reponses), coupées avant la citation, adresses et téléphones masqués. Elles attendent dans le document `nour-reponses`. La tâche Claude « Tri des réponses Nūr Meet » (abonnement, 12 h 37 et 18 h 52) les lit avec `reponses_a_trier` et les classe avec `trier_reponses` (même consigne que le cerveau : INTERESSE, QUESTION, REFUS, AUTOMATIQUE, AUTRE). Après le tri, le texte est effacé. Un intéressé ou une question devient une demande à Walid sur « Lire les réponses reçues » (Telegram), et « Réponses intéressées » est recalculé ; « Réponses reçues des restaurants » vient du relevé.
+Le relevé horaire du serveur Nūr envoie aussi toutes les réponses des restaurants (depuis le 05/10, aucune supposée déjà traitée, décision de Walid du 09/11) (n8n np_reponses), coupées avant la citation, adresses et téléphones masqués. Elles attendent dans le document `nour-reponses`. La tâche Claude « Tri des réponses Nūr Meet » (abonnement, 12 h 37 et 18 h 52) les lit avec `reponses_a_trier` et les classe avec `trier_reponses` (même consigne que le cerveau : INTERESSE, QUESTION, REFUS, AUTOMATIQUE, AUTRE). Après le tri, le texte est effacé. Chaque intéressé ou question, même ancien, devient une demande à Walid sur « Lire les réponses reçues » (Telegram), et « Réponses intéressées » est recalculé ; « Réponses reçues des restaurants » vient du relevé.
 
 ## Données
 

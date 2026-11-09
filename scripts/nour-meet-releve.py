@@ -139,7 +139,7 @@ envoyes7 = [l for l in envois if l.get("statut") == "envoye" and (jour_envoi(l) 
 ouverts7 = sum(1 for l in envoyes7 if str(l.get("id")) in premiere_ouverture)
 corps = {"jours": stats, "glissant7": {"envoyes": len(envoyes7), "ouverts": ouverts7}}
 
-# Les réponses des restaurants des 21 derniers jours, pour le tri par Claude dans Loop Agent
+# Toutes les réponses des restaurants (décision de Walid du 09/11 : rien n'est supposé déjà traité), pour le tri par Claude dans Loop Agent
 # (reprise du cerveau, 09/11/2026) : texte coupé avant la citation du mail d'origine,
 # adresses et téléphones masqués ; le nom du restaurant est retrouvé par son adresse ou l'objet.
 import hashlib
@@ -152,11 +152,10 @@ def masquer(t):
 
 par_email = {str(p.get("email") or "").lower(): p for p in prospects if p.get("email")}
 noms_longs = sorted([p for p in prospects if len(str(p.get("nom") or "")) >= 5], key=lambda p: -len(str(p.get("nom"))))
-debut21 = (aujourdhui - datetime.timedelta(days=21)).isoformat()
 a_trier = []
 for r in reponses:
     j = jour_de(r.get("recu"))
-    if not j or j < debut21:
+    if not j:
         continue
     objet = str(r.get("objet") or "")
     brut = str(r.get("texte") or "")
@@ -169,7 +168,7 @@ for r in reponses:
         "ville": str(p.get("ville"))[:40] if p and p.get("ville") else None,
         "objet": masquer(objet)[:150], "texte": masquer(texte).strip()[:800],
     })
-corps["reponses"] = a_trier[-60:]
+corps["reponses"] = sorted(a_trier, key=lambda x: x["jour"])[-200:]
 
 # Restaurants inscrits et abonnés, lus dans la base de l'application Nūr Meet (même serveur),
 # en LECTURE SEULE : comptes « ORGANIZER » hors démo, abonnements actifs. Seulement des nombres.
