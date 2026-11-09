@@ -22,6 +22,9 @@ export function describeEvent(tool, args = {}) {
         ? { line: `🔴 Premier résultat à valider sur ${args.action} : ${short(args.constat)}`, needsOk: true }
         : { line: `▸ ${args.action} : ${short(args.constat)}`, needsOk: false };
     case 'proposer_action':
+      // Les idées du conseiller marketing (titre « Marketing — … ») restent dans Loop Agent,
+      // sans Telegram (choix de Walid du 09/11/2026).
+      if (/^\s*Marketing\s*[—–-]/.test(String(args.titre || ''))) return null;
       return { line: `🔴 Nouvelle action à valider : ${short(args.titre, 120)}`, needsOk: true };
     case 'proposer_modification':
       return { line: `🔴 Modification à valider sur ${args.action} (action arrêtée en attendant)`, needsOk: true };

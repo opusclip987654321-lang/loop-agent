@@ -60,3 +60,8 @@ test('le récap Telegram signale la dépense notée', () => {
   assert.match(ev.line, /Dépense notée : Google Cloud \(voix Gemini\) — 4\.2 \$ \/ mois \(estimation\)/);
   assert.equal(ev.needsOk, false);
 });
+
+test('les idées du conseiller marketing ne partent pas sur Telegram', () => {
+  assert.equal(describeEvent('proposer_action', { titre: 'Marketing — Shorts avec avatar IA' }), null);
+  assert.match(describeEvent('proposer_action', { titre: 'Réécrire le mail' }).line, /Nouvelle action à valider/);
+});
