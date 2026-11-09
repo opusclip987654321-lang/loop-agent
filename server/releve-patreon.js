@@ -2,7 +2,8 @@
 // Toutes les 3 heures, Loop Agent lit chez Patreon (API v2, en lecture) les membres de la
 // campagne, et remplit les indicateurs validés du projet « impacteur-communaute » :
 //   « …nouveaux membres… » (somme)   = membres actifs arrivés ce jour-là ;
-//   « …revenus… »          (dernier) = total payé chaque mois par les membres actifs.
+//   « …revenus… »          (dernier) = total payé chaque mois par les membres actifs ;
+//   « Membres gratuits Patreon » (dernier, créé ici s'il manque) = membres sans paiement.
 // Seuls des nombres entrent dans Loop Agent : ni nom, ni adresse.
 // Les accès (identifiant, secret, clé d'accès, clé de renouvellement) sont dans
 // DATA_DIR/patreon.json (droits 600), rangés par scripts/patreon-jeton.js. La clé d'accès
@@ -32,7 +33,12 @@ export function lireMembres(pages) {
 }
 
 export function appliquer(doc, lu, aujourdhui, nowIso) {
-  const kpis = (doc.kpis || []).filter((k) => k.status === 'valide');
+  doc.kpis = doc.kpis || [];
+  // « Membres gratuits Patreon » : ajouté par décision de Walid du 09/11/2026 (déjà validé).
+  if (!doc.kpis.some((k) => /membres gratuits/i.test(k.name) && k.status !== 'refuse'))
+    doc.kpis.push({ id: 'kpi-patreon-gratuits', name: 'Membres gratuits Patreon', unit: 'membres', agg: 'dernier', direction: 'augmenter', why: 'Voir si les messages font grandir la liste des gratuits, première marche avant le payant (décision de Walid du 09/11/2026).', status: 'valide', by: 'walid', at: nowIso });
+  const kpis = doc.kpis.filter((k) => k.status === 'valide');
+  const gratuits = kpis.find((k) => /membres gratuits/i.test(k.name));
   const nouveaux = kpis.find((k) => /nouveaux membres/i.test(k.name));
   const revenus = kpis.find((k) => /revenu/i.test(k.name));
   doc.kpiValues = doc.kpiValues || [];
@@ -47,6 +53,7 @@ export function appliquer(doc, lu, aujourdhui, nowIso) {
       const d = new Date(Date.parse(aujourdhui + 'T12:00:00Z') - i * 86400000).toISOString().slice(0, 10);
       poser(nouveaux, d, lu.arrivees[d] || 0, `${lu.arrivees[d] || 0} nouveau(x) membre(s) actif(s) arrivé(s) ce jour-là.`);
     }
+  if (gratuits && lu.statuts) poser(gratuits, aujourdhui, lu.statuts.gratuit || 0, `${lu.statuts.gratuit || 0} membre(s) gratuit(s) sur ${lu.lus} fiche(s) Patreon.`);
   if (revenus) poser(revenus, aujourdhui, lu.revenusMois, `${lu.actifs} membre(s) actif(s), ${lu.revenusMois} par mois au total (devise de la campagne Patreon).`);
   doc.kpiValues = doc.kpiValues.slice(0, 2000);
   return ecrits;

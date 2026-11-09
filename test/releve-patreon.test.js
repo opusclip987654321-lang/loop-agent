@@ -27,6 +27,12 @@ test('membres actifs, revenus du mois et arrivées par jour, sans nom', () => {
   assert.equal(v('k-new', '2026-11-09'), 0);
   assert.equal(v('k-rev', '2026-11-09'), 8);
   assert.ok(!JSON.stringify(doc).includes('Ali'));
+  const g = doc.kpis.find((k) => k.name === 'Membres gratuits Patreon');
+  assert.equal(g.status, 'valide');
+  assert.equal(v(g.id, '2026-11-09'), 0);
+  appliquer(doc, { ...lu, statuts: { gratuit: 90 }, lus: 90 }, '2026-11-09', '2026-11-09T13:00:00Z');
+  assert.equal(doc.kpis.filter((k) => k.name === 'Membres gratuits Patreon').length, 1);
+  assert.equal(v(g.id, '2026-11-09'), 90);
 });
 
 test('clé expirée : renouvelée toute seule, puis lecture', async () => {

@@ -103,7 +103,7 @@ Chaque heure, Loop Agent lit `https://vegebudget.fr/api/stats` (jeton dans `/dat
 
 ## Relevé Patreon (Impacteur Communauté)
 
-Toutes les 3 heures, Loop Agent lit en lecture seule les membres de la campagne Patreon (API v2) et remplit « Nouveaux membres Patreon » (arrivées actives par jour, 14 derniers jours) et « Revenus Patreon du mois » (total mensuel des membres actifs). Seuls des nombres entrent, aucun nom. Accès (client, secret, clé d'accès, clé de renouvellement) dans `/data/patreon.json` (droits 600), rangés par `ssh -t loop-agent-vps 'docker exec -it loop-agent node scripts/patreon-jeton.js ranger'` (saisie masquée) ; la clé d'accès est renouvelée toute seule avant d'expirer. `essai` affiche seulement des totaux, `retirer` débranche.
+Toutes les 3 heures, Loop Agent lit en lecture seule les membres de la campagne Patreon (API v2) et remplit « Nouveaux membres Patreon » (arrivées actives par jour, 14 derniers jours) , « Revenus Patreon du mois » (total mensuel des membres actifs) et « Membres gratuits Patreon » (créé au premier relevé, décision de Walid du 09/11). Seuls des nombres entrent, aucun nom. Accès (client, secret, clé d'accès, clé de renouvellement) dans `/data/patreon.json` (droits 600), rangés par `ssh -t loop-agent-vps 'docker exec -it loop-agent node scripts/patreon-jeton.js ranger'` (saisie masquée) ; la clé d'accès est renouvelée toute seule avant d'expirer. `essai` affiche seulement des totaux, `retirer` débranche.
 
 ## Données
 
