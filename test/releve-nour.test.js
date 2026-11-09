@@ -69,3 +69,18 @@ test('route : refuse sans jeton, accepte avec, écrit dans le projet nourmeet', 
   assert.equal(doc.kpiValues.find((v) => v.kpi === 'k-contact').value, 12);
   assert.equal((await fetch(base + '/releve/nour-meet')).status, 405);
 });
+
+test('inscriptions et abonnés des restaurants (base de l’application)', () => {
+  const k2 = [...kpis, { id: 'k-ins', name: 'Inscriptions de restaurants', agg: 'somme', status: 'valide' }, { id: 'k-abo', name: 'Restaurants abonnés', agg: 'dernier', status: 'valide' }];
+  const doc = { kpis: k2, kpiValues: [] };
+  const r = nettoyer({ jours: { '2026-11-08': { premiers: 1, inscriptions: 0 }, '2026-11-09': { premiers: 2, inscriptions: 1 } }, glissant7: {}, restaurants: { total: 2, abonnes: 0 } });
+  appliquer(doc, r, '2026-11-09T10:00:00Z');
+  const v = (k, d) => (doc.kpiValues.find((x) => x.kpi === k && x.date === d) || {}).value;
+  assert.equal(v('k-ins', '2026-11-09'), 1);
+  assert.equal(v('k-ins', '2026-11-08'), 0);
+  assert.equal(v('k-abo', '2026-11-09'), 0);
+  // Un ancien relevé sans ces champs ne touche pas aux indicateurs.
+  const doc2 = { kpis: k2, kpiValues: [] };
+  appliquer(doc2, nettoyer({ jours: { '2026-11-09': { premiers: 2 } }, glissant7: {} }), 'x');
+  assert.equal(doc2.kpiValues.some((x) => x.kpi === 'k-ins' || x.kpi === 'k-abo'), false);
+});

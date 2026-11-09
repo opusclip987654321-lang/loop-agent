@@ -49,13 +49,15 @@ export function nettoyer(body) {
       ouvertures: n(s.ouvertures),
       reponses: n(s.reponses),
       decouverts: n(s.decouverts),
+      inscriptions: s.inscriptions === undefined ? null : n(s.inscriptions),
       versions,
     };
   }
   if (!Object.keys(jours).length) throw new Error('Aucun jour valable.');
   const g = body.glissant7 || {};
   const glissant7 = { envoyes: n(g.envoyes), ouverts: n(g.ouverts) };
-  return { jours, glissant7 };
+  const r = body.restaurants && typeof body.restaurants === 'object' ? { total: n(body.restaurants.total), abonnes: n(body.restaurants.abonnes) } : null;
+  return { jours, glissant7, restaurants: r };
 }
 
 // Applique le relevé au document du projet (fonction pure, testée seule).
@@ -70,6 +72,8 @@ export function appliquer(doc, releve, nowIso) {
   const kpis = (doc.kpis || []).filter((k) => k.status === 'valide');
   const contact = kpis.find((k) => /contact/i.test(k.name));
   const ouverture = kpis.find((k) => /ouverture/i.test(k.name));
+  const inscriptions = kpis.find((k) => /inscription/i.test(k.name));
+  const abonnes = kpis.find((k) => /abonn/i.test(k.name));
   doc.kpiValues = doc.kpiValues || [];
   // Le relevé lit directement n8n : pour ce jour et cet indicateur, il remplace toute autre
   // mesure (celle d'un agent qui recopiait Notion, par exemple), sinon une somme compterait double.
@@ -90,6 +94,20 @@ export function appliquer(doc, releve, nowIso) {
     const taux = Math.round((g.ouverts / g.envoyes) * 1000) / 10;
     poser(ouverture, aujourdhui, taux, `${g.ouverts} mail(s) ouvert(s) sur ${g.envoyes} envoyé(s) ces 7 derniers jours.`);
     ecrits.push(ouverture.name + ' ' + aujourdhui);
+  }
+  const ORIGIN_BASE = 'Base de l’application Nūr Meet (comptes restaurateurs hors démo, abonnements actifs), relevé automatique';
+  if (inscriptions)
+    for (const [d, s] of Object.entries(releve.jours))
+      if (s.inscriptions !== null && s.inscriptions !== undefined) {
+        poser(inscriptions, d, s.inscriptions, `${s.inscriptions} restaurant(s) inscrit(s) ce jour-là.`);
+        doc.kpiValues[0].origin = ORIGIN_BASE;
+        ecrits.push(inscriptions.name + ' ' + d);
+      }
+  if (abonnes && releve.restaurants && releve.restaurants.abonnes !== null) {
+    const auj = Object.keys(releve.jours).sort().pop();
+    poser(abonnes, auj, releve.restaurants.abonnes, `${releve.restaurants.abonnes} restaurant(s) abonné(s) sur ${releve.restaurants.total ?? '?'} inscrit(s) au total.`);
+    doc.kpiValues[0].origin = ORIGIN_BASE;
+    ecrits.push(abonnes.name + ' ' + auj);
   }
   doc.kpiValues = doc.kpiValues.slice(0, 2000);
   return ecrits;

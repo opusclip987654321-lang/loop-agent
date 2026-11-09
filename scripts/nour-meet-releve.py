@@ -139,6 +139,35 @@ envoyes7 = [l for l in envois if l.get("statut") == "envoye" and (jour_envoi(l) 
 ouverts7 = sum(1 for l in envoyes7 if str(l.get("id")) in premiere_ouverture)
 corps = {"jours": stats, "glissant7": {"envoyes": len(envoyes7), "ouverts": ouverts7}}
 
+# Restaurants inscrits et abonnés, lus dans la base de l'application Nūr Meet (même serveur),
+# en LECTURE SEULE : comptes « ORGANIZER » hors démo, abonnements actifs. Seulement des nombres.
+SQL = """
+SELECT json_build_object(
+  'jours', (SELECT coalesce(json_object_agg(j, n), '{}') FROM (
+      SELECT to_char("createdAt" AT TIME ZONE 'Europe/Paris', 'YYYY-MM-DD') j, count(*) n FROM "User"
+      WHERE role = 'ORGANIZER' AND NOT "isDemo" AND "deletedAt" IS NULL
+        AND "createdAt" > now() - interval '3 days' GROUP BY 1) t),
+  'total', (SELECT count(*) FROM "User" WHERE role = 'ORGANIZER' AND NOT "isDemo" AND "deletedAt" IS NULL),
+  'abonnes', (SELECT count(DISTINCT "restaurantId") FROM "RestaurantSubscription"
+      WHERE lower(status::text) IN ('active', 'trialing') AND "cancelledAt" IS NULL)
+);
+"""
+try:
+    import subprocess
+    sortie = subprocess.run(
+        ["docker", "exec", "-i", "nour-v2-postgres-1", "sh", "-c", 'psql -U "$POSTGRES_USER" -d "${POSTGRES_DB:-nour_meet}" -At -v ON_ERROR_STOP=1'],
+        input=SQL, capture_output=True, text=True, timeout=30,
+    )
+    if sortie.returncode == 0 and sortie.stdout.strip():
+        r = json.loads(sortie.stdout.strip().splitlines()[-1])
+        for d in jours:
+            stats[d]["inscriptions"] = int((r.get("jours") or {}).get(d, 0))
+        corps["restaurants"] = {"total": int(r.get("total") or 0), "abonnes": int(r.get("abonnes") or 0)}
+    else:
+        print("base Nūr Meet illisible :", (sortie.stderr or "").strip()[:200])
+except Exception as e:
+    print("base Nūr Meet illisible :", str(e)[:200])
+
 if ESSAI:
     print(json.dumps(corps, ensure_ascii=False, indent=1))
     sys.exit(0)
