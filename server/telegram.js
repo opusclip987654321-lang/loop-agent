@@ -47,7 +47,11 @@ export function describeEvent(tool, args = {}) {
     case 'ecrire_bilan':
       return { line: `📈 Bilan ${args.periode_type} ${args.periode} écrit`, needsOk: false };
     case 'repondre_a_walid':
-      return { line: `💬 Réponse de l’agent à ta question (${args.projet}) : ${short(args.reponse, 200)}`, needsOk: true };
+      // Pas de Telegram pour une simple réponse sur un post-it (règle de Walid du 09/11/2026),
+      // sauf si l'agent ne peut plus avancer sans une action de Walid.
+      return args.bloque_sans_walid === true
+        ? { line: `🔴 ${args.projet} : l’agent a répondu sur ton post-it et ne peut pas avancer sans toi : ${short(args.reponse, 200)}`, needsOk: true }
+        : null;
     case 'demander_a_walid':
       return { line: `🔴 Demande à Walid (${args.projet}) : ${short(args.demande, 200)}`, needsOk: true };
     case 'enregistrer_depense':

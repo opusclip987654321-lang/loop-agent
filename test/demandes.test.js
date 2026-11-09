@@ -118,7 +118,8 @@ test('Walid pose une question : la demande reste ouverte, l’agent répond, la 
     assert.equal(apres.demandes_a_walid[0].question_de_walid_a_repondre, undefined);
     assert.equal(apres.demandes_a_walid[0].echanges.length, 2);
     assert.equal(apres.couleur, 'rouge');
-    assert.match(describeEvent('repondre_a_walid', { projet: 'ebook', reponse: 'Je conseille…' }).line, /💬 Réponse de l’agent/);
+    assert.equal(describeEvent('repondre_a_walid', { projet: 'ebook', reponse: 'Je conseille…' }), null, 'simple réponse : pas de Telegram');
+    assert.match(describeEvent('repondre_a_walid', { projet: 'ebook', reponse: 'Il me faut ton choix.', bloque_sans_walid: true }).line, /ne peut pas avancer sans toi/);
   } finally {
     s.done();
   }

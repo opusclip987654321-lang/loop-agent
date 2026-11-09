@@ -908,6 +908,10 @@ export function createAgentTools({ db, dataDir, onAgentWrite = () => {}, onToolD
           action: { type: 'string' },
           demande_id: { type: 'string' },
           reponse: { type: 'string', description: 'Ta réponse à Walid, en mots simples.' },
+          bloque_sans_walid: {
+            type: 'boolean',
+            description: 'true SEULEMENT si tu ne peux plus avancer tant que Walid n’a pas fait quelque chose (décider, donner un accès…) : il est alors prévenu sur Telegram. Sinon false : ta réponse reste sur le post-it, sans message (règle de Walid du 09/11).',
+          },
         },
         required: ['projet', 'action', 'demande_id', 'reponse'],
       },
@@ -1151,6 +1155,6 @@ export const CONNECTOR_INSTRUCTIONS = `Loop Agent est le tableau de bord des bou
 10. Résultats : propose 3 à 6 indicateurs clés par projet (proposer_indicateur) s'il n'y en a pas ; mesure les indicateurs validés à chaque tour (enregistrer_indicateur) ; écris les bilans dus (lire_projet → bilans_a_ecrire) avec ecrire_bilan : pourquoi on a progressé ou reculé par rapport à la période précédente, et l'action qui a changé la donne.
 11. Argent : quand tu connais une dépense réelle du projet (abonnement, recharge, API facturée), note-la avec enregistrer_depense et sa source ; un montant calculé se marque estimation:true. Le coût affiché d'une session Claude n'est pas une dépense. Tu n'engages jamais de dépense nouvelle sans l'accord de Walid.
 12. Quand Walid doit faire ou décider quelque chose (choisir, donner un accès, créer un compte, installer, envoyer) : demander_a_walid (ou signaler_acces pour un accès à un outil). La demande reste ouverte et l'action rouge jusqu'à ce que Walid la ferme. Joins-y ce qu'il doit regarder pour décider (images ou PDF déposés avec preparer_depot, ou liens) : il doit pouvoir décider sans chercher ailleurs. Une phrase « Pour Walid : … » écrite dans un compte rendu est rattrapée automatiquement, mais utilise l'outil : une chose par demande, en une phrase simple.
-13. Questions de Walid : au DÉBUT de chaque tour, regarde dans lire_projet les demandes qui ont « question_de_walid_a_repondre » et réponds à chacune avec repondre_a_walid, clairement et simplement, avec tes arguments et ta recommandation. La demande reste ouverte : c'est Walid qui la ferme quand il a décidé.
+13. Questions de Walid : au DÉBUT de chaque tour, regarde dans lire_projet les demandes qui ont « question_de_walid_a_repondre » et réponds à chacune avec repondre_a_walid, clairement et simplement, avec tes arguments et ta recommandation. Mets bloque_sans_walid à true seulement si tu ne peux plus avancer sans une action de sa part (sinon pas de Telegram). La demande reste ouverte : c'est Walid qui la ferme quand il a décidé.
 14. Contexte : tout ce que Walid lit (demandes, blocages, comptes rendus) dit en mots simples ce que tu voulais faire, pourquoi c'est utile au projet, et ce qui se passe. Un blocage s'écrit avec ecrire_tour → idees[].erreur ET idees[].contexte. Une idée « abandonnee_par_walid » ne se refait pas ; « blocage_leve_par_walid » veut dire : réessaie.
 Jamais de mot de passe, de clé ni de jeton dans ce que tu écris.`;
