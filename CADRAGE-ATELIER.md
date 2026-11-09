@@ -95,6 +95,8 @@ Quand un agent a besoin de Walid (choisir, donner un accès, créer un compte, i
 
 La demande s'affiche en rouge **sur la carte de l'action et tout en haut de son détail**, avec ce que Walid doit regarder pour décider : images ou PDF joints par l'agent (vignettes, clic pour agrandir) ou liens. Les demandes d'accès (signaler_acces) s'y affichent aussi, avec « C'est branché ». **[Décidé le 9 nov. 2026]**
 
+Sur chaque demande, Walid peut aussi **poser une question** à l'agent : la demande reste ouverte et rouge, l'agent doit répondre au début de son tour suivant (`repondre_a_walid`), et l'échange s'affiche sur la demande. Walid la ferme quand il a décidé. **[Décidé le 9 nov. 2026]**
+
 ### Relance de l'agent après une décision
 
 Quand Walid valide, refuse ou répond (proposition, modification, premier résultat, idée, indicateur, action ajoutée, reprise après pause), Loop Agent **relance la routine Claude du projet** par son déclencheur « API », avec la liste des décisions. **Au plus une fois toutes les 30 minutes par projet** ; une décision prise pendant ce délai part à la fin du délai. Seuls les projets dont l'agent tourne en routine, et dont le jeton a été rangé sur le serveur, sont relancés. Le tour consomme l'abonnement Claude, pas l'API. Un message Telegram signale chaque relance, ou l'échec d'une relance. **[Décidé le 7 nov. 2026]**

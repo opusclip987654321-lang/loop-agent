@@ -95,3 +95,31 @@ test('un agent dépose une image et la joint à sa demande ; l’adresse ne sert
     rmSync(dataDir, { recursive: true, force: true });
   }
 });
+
+test('Walid pose une question : la demande reste ouverte, l’agent répond, la relance porte la question', async () => {
+  const s = setup();
+  try {
+    const action = (await s.tools.lire_projet.handler({ projet: 'ebook' })).actions[0].id;
+    await s.tools.demander_a_walid.handler({ projet: 'ebook', action, demande: 'Donner le nom d’auteur du livre 1' });
+    const key = 'project:ebook';
+    const avant = s.db.getDoc(key);
+    const doc = JSON.parse(avant.value);
+    const d = doc.tasks.find((x) => x.id === action).demandes[0];
+    d.echanges = [{ de: 'walid', texte: 'Un nom pour tous mes livres, ou un par projet ?', at: '2026-11-09T05:00:00Z' }];
+    d.attenteAgent = true;
+    s.db.putDoc(key, JSON.stringify(doc), avant.version, 'walid');
+    const decisions = decisionsBetween(avant.value, JSON.stringify(doc));
+    assert.match(decisions[0], /question de Walid .* Un nom pour tous mes livres/);
+    const lu = (await s.tools.lire_projet.handler({ projet: 'ebook' })).actions.find((x) => x.id === action).demandes_a_walid[0];
+    assert.equal(lu.question_de_walid_a_repondre, 'Un nom pour tous mes livres, ou un par projet ?');
+    assert.match(await s.tools.repondre_a_walid.handler({ projet: 'ebook', action, demande_id: lu.id, reponse: 'Je conseille un nom par grand thème.' }), /Réponse ajoutée/);
+    const apres = (await s.tools.lire_projet.handler({ projet: 'ebook' })).actions.find((x) => x.id === action);
+    assert.equal(apres.demandes_a_walid[0].statut, 'ouverte', 'Walid seul ferme la demande');
+    assert.equal(apres.demandes_a_walid[0].question_de_walid_a_repondre, undefined);
+    assert.equal(apres.demandes_a_walid[0].echanges.length, 2);
+    assert.equal(apres.couleur, 'rouge');
+    assert.match(describeEvent('repondre_a_walid', { projet: 'ebook', reponse: 'Je conseille…' }).line, /💬 Réponse de l’agent/);
+  } finally {
+    s.done();
+  }
+});

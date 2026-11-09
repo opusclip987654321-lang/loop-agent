@@ -53,6 +53,11 @@ export function decisionsBetween(oldValue, newValue) {
     const oldDem = new Map((Array.isArray(o.demandes) ? o.demandes : []).map((d) => [d.id, d]));
     for (const d of Array.isArray(t.demandes) ? t.demandes : []) {
       const before = oldDem.get(d.id);
+      const nbQ = (x) => (x && Array.isArray(x.echanges) ? x.echanges.filter((e) => e.de === 'walid').length : 0);
+      if (before && d.statut === 'ouverte' && nbQ(d) > nbQ(before)) {
+        const q = d.echanges.filter((e) => e.de === 'walid').slice(-1)[0];
+        out.push(`question de Walid sur la demande « ${short(d.texte, 80)} » (« ${name} ») : « ${short(q.texte, 300)} » — réponds avec repondre_a_walid`);
+      }
       if (before && before.statut === 'ouverte' && d.statut !== 'ouverte')
         out.push(`demande « ${short(d.texte, 80)} » sur « ${name} » : ${d.statut === 'faite' ? 'faite' : 'plus besoin'}${d.reponse ? ` (réponse de Walid : « ${short(d.reponse, 160)} »)` : ''}`);
     }

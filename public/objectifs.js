@@ -376,7 +376,7 @@ function demandesStrip(t) {
   const rows = ds
     .map(
       (d) =>
-        `<div style="margin-top:10px"><strong>${esc(d.texte)}</strong>${d.pourquoi ? `<p class="tiny" style="margin:4px 0 0">${esc(d.pourquoi)}</p>` : ''}${piecesHtml(d)}<p class="tiny" style="margin:4px 0 6px">Demandé le ${esc(String(d.at).slice(0, 10).split('-').reverse().join('/'))}${d.source === 'compte rendu' ? ' · repéré dans un compte rendu de l’agent' : ''}</p><input id="dem-${d.id}" placeholder="Ta réponse (facultatif), par exemple « couverture A »" style="width:100%;margin-bottom:6px"><div class="actions" style="margin-top:0">${btn('C’est fait', `fermerDemande('${t.id}','${d.id}','faite')`, 'good')}${btn('Plus besoin', `fermerDemande('${t.id}','${d.id}','abandonnee')`)}</div></div>`,
+        `<div style="margin-top:10px"><strong>${esc(d.texte)}</strong>${d.pourquoi ? `<p class="tiny" style="margin:4px 0 0">${esc(d.pourquoi)}</p>` : ''}${piecesHtml(d)}<p class="tiny" style="margin:4px 0 6px">Demandé le ${esc(String(d.at).slice(0, 10).split('-').reverse().join('/'))}${d.source === 'compte rendu' ? ' · repéré dans un compte rendu de l’agent' : ''}</p>${echangesHtml(d)}<input id="dem-${d.id}" placeholder="Ta réponse, ou ta question pour l’agent" style="width:100%;margin-bottom:6px"><div class="actions" style="margin-top:0">${btn('C’est fait', `fermerDemande('${t.id}','${d.id}','faite')`, 'good')}${btn('Poser une question', `questionDemande('${t.id}','${d.id}')`)}${btn('Plus besoin', `fermerDemande('${t.id}','${d.id}','abandonnee')`)}</div></div>`,
     )
     .join('');
   const accRows = acc
@@ -386,6 +386,37 @@ function demandesStrip(t) {
     )
     .join('');
   return `<section class="strip red" style="margin:12px 0"><strong>🙋 ${n > 1 ? n + ' choses attendent' : 'Une chose attend'} ton aide</strong>${rows}${accRows}</section>`;
+}
+// La petite conversation sur une demande : tes questions et les réponses de l'agent.
+function echangesHtml(d) {
+  const es = d.echanges || [];
+  if (!es.length) return '';
+  const quand = (s) => {
+    const d = new Date(s);
+    return Number.isNaN(+d) ? '' : d.toLocaleString('fr-FR', { timeZone: 'Europe/Paris', day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' }).replace(' ', ' à ');
+  };
+  const lignes = es
+    .map(
+      (e) =>
+        `<div style="margin:6px 0;padding:8px 10px;border-radius:8px;background:${e.de === 'walid' ? 'rgba(255,255,255,.04)' : 'rgba(110,190,140,.10)'}"><span class="tiny">${e.de === 'walid' ? 'Toi' : 'L’agent'} · ${esc(quand(e.at))}</span><div style="white-space:pre-line">${esc(e.texte)}</div></div>`,
+    )
+    .join('');
+  const attente = d.attenteAgent ? '<p class="tiny" style="margin:4px 0 8px">⏳ En attente de la réponse de l’agent (à son prochain passage).</p>' : '';
+  return `<div style="margin:6px 0 8px">${lignes}${attente}</div>`;
+}
+function questionDemande(taskId, demId) {
+  const t = task(taskId);
+  const d = t && (t.demandes || []).find((x) => x.id === demId);
+  if (!d) return;
+  const input = document.getElementById('dem-' + demId);
+  const q = input && input.value.trim();
+  if (!q) return notify('Écris d’abord ta question dans la case.');
+  (d.echanges = d.echanges || []).push({ de: 'walid', texte: q.slice(0, 2000), at: new Date().toISOString() });
+  d.attenteAgent = true;
+  save();
+  render();
+  if (document.getElementById('dialog').open) detail(taskId, true);
+  notify('Question envoyée : l’agent te répondra sur ce post-it.');
 }
 function fermerAcces(taskId, idx, ai, branche) {
   const t = task(taskId);

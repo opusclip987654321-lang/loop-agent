@@ -385,7 +385,7 @@ export function createAgentTools({ db, dataDir, onAgentWrite = () => {}, onToolD
               reponse_walid_le: (i.walidReply && i.walidReplyAt) || undefined,
               acces_manquants: (i.accessRequests || []).filter((a) => !a.connected).map((a) => a.name),
             })),
-            demandes_a_walid: (t.demandes || []).slice(0, 10).map((d) => ({ id: d.id, demande: d.texte, statut: d.statut, pieces: (d.pieces || []).map((p) => p.titre), depuis: d.at, fermee_le: d.fermeeLe || undefined, reponse_walid: d.reponse || undefined })),
+            demandes_a_walid: (t.demandes || []).slice(0, 10).map((d) => ({ id: d.id, demande: d.texte, statut: d.statut, question_de_walid_a_repondre: d.statut === 'ouverte' && d.attenteAgent ? (d.echanges || []).filter((e) => e.de === 'walid').slice(-1)[0]?.texte : undefined, echanges: (d.echanges || []).slice(-6).map((e) => ({ de: e.de, texte: e.texte, le: e.at })), pieces: (d.pieces || []).map((p) => p.titre), depuis: d.at, fermee_le: d.fermeeLe || undefined, reponse_walid: d.reponse || undefined })),
             derniers_tours: (t.reviewHistory || []).slice(0, 3),
             messages_de_walid: (t.reviewConversation || []).filter((m) => m.role === 'Walid').slice(-5),
           })),
@@ -890,6 +890,32 @@ export function createAgentTools({ db, dataDir, onAgentWrite = () => {}, onToolD
       },
     },
     {
+      name: 'repondre_a_walid',
+      description:
+        'Répond à une question que Walid a posée sur une de tes demandes (lire_projet → demandes_a_walid → question_de_walid_a_repondre). Réponds simplement, avec tes arguments et ta recommandation. La demande reste ouverte : c’est Walid qui la ferme quand il a décidé. Tu peux joindre des pièces (images, PDF, liens) comme dans demander_a_walid.',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          projet: { type: 'string' },
+          action: { type: 'string' },
+          demande_id: { type: 'string' },
+          reponse: { type: 'string', description: 'Ta réponse à Walid, en mots simples.' },
+        },
+        required: ['projet', 'action', 'demande_id', 'reponse'],
+      },
+      handler(args) {
+        return mutateProject(args.projet, agentName(args), (doc) => {
+          const t = findTask(doc, args.action);
+          const d = (t.demandes || []).find((x) => x.id === args.demande_id);
+          if (!d || d.statut !== 'ouverte') throw new ToolError('Demande introuvable ou déjà fermée par Walid (voir lire_projet → demandes_a_walid).');
+          (d.echanges = d.echanges || []).push({ de: 'agent', texte: text(args.reponse, 'reponse', { max: 3000 }), at: nowIso() });
+          d.echanges = d.echanges.slice(-20);
+          d.attenteAgent = false;
+          return `Réponse ajoutée sur « ${d.texte} ». Walid la voit sur le post-it ; il fermera la demande quand il aura décidé.`;
+        });
+      },
+    },
+    {
       name: 'preparer_depot',
       description:
         'Donne une adresse à usage unique (30 minutes) pour déposer une image (PNG, JPG, WebP) ou un PDF que Walid doit voir, par exemple deux couvertures à comparer. Envoie le fichier avec : curl -sS -X PUT --data-binary @CHEMIN -H "x-file-name: NOM" ADRESSE. La réponse donne « fichier » : cite-le dans demander_a_walid (pieces). Une adresse par fichier.',
@@ -1117,4 +1143,5 @@ export const CONNECTOR_INSTRUCTIONS = `Loop Agent est le tableau de bord des bou
 10. Résultats : propose 3 à 6 indicateurs clés par projet (proposer_indicateur) s'il n'y en a pas ; mesure les indicateurs validés à chaque tour (enregistrer_indicateur) ; écris les bilans dus (lire_projet → bilans_a_ecrire) avec ecrire_bilan : pourquoi on a progressé ou reculé par rapport à la période précédente, et l'action qui a changé la donne.
 11. Argent : quand tu connais une dépense réelle du projet (abonnement, recharge, API facturée), note-la avec enregistrer_depense et sa source ; un montant calculé se marque estimation:true. Le coût affiché d'une session Claude n'est pas une dépense. Tu n'engages jamais de dépense nouvelle sans l'accord de Walid.
 12. Quand Walid doit faire ou décider quelque chose (choisir, donner un accès, créer un compte, installer, envoyer) : demander_a_walid (ou signaler_acces pour un accès à un outil). La demande reste ouverte et l'action rouge jusqu'à ce que Walid la ferme. Joins-y ce qu'il doit regarder pour décider (images ou PDF déposés avec preparer_depot, ou liens) : il doit pouvoir décider sans chercher ailleurs. Une phrase « Pour Walid : … » écrite dans un compte rendu est rattrapée automatiquement, mais utilise l'outil : une chose par demande, en une phrase simple.
+13. Questions de Walid : au DÉBUT de chaque tour, regarde dans lire_projet les demandes qui ont « question_de_walid_a_repondre » et réponds à chacune avec repondre_a_walid, clairement et simplement, avec tes arguments et ta recommandation. La demande reste ouverte : c'est Walid qui la ferme quand il a décidé.
 Jamais de mot de passe, de clé ni de jeton dans ce que tu écris.`;

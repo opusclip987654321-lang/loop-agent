@@ -46,6 +46,8 @@ export function describeEvent(tool, args = {}) {
       return { line: `🔴 Indicateur à valider : ${short(args.nom, 100)}`, needsOk: true };
     case 'ecrire_bilan':
       return { line: `📈 Bilan ${args.periode_type} ${args.periode} écrit`, needsOk: false };
+    case 'repondre_a_walid':
+      return { line: `💬 Réponse de l’agent à ta question (${args.projet}) : ${short(args.reponse, 200)}`, needsOk: true };
     case 'demander_a_walid':
       return { line: `🔴 Demande à Walid (${args.projet}) : ${short(args.demande, 200)}`, needsOk: true };
     case 'enregistrer_depense':
