@@ -11,6 +11,7 @@ import { createBoites } from './boites.js';
 import { createSeo } from './seo.js';
 import { createNourVeille } from './nour-veille.js';
 import { createReleveVegebudget } from './releve-vegebudget.js';
+import { createReleveImpacteur } from './releve-impacteur.js';
 
 const config = {
   port: Number(process.env.PORT || 3000),
@@ -87,6 +88,9 @@ const stopVeilleNour = notifier.enabled ? createNourVeille({ db, dataDir: config
 // Chiffres de vegebudget.fr (visiteurs, inscriptions, abonnés), chaque heure. Sans jeton rangé, ne fait rien.
 const stopVegebudget = createReleveVegebudget({ db, dataDir: config.dataDir }).start();
 
+// Invitations d'Email interview (Google Sheet Impacteur via n8n), chaque heure. Sans adresse rangée, ne fait rien.
+const stopImpacteur = createReleveImpacteur({ db, dataDir: config.dataDir }).start();
+
 const stopBackups = scheduleBackups({
   db,
   dataDir: config.dataDir,
@@ -111,6 +115,7 @@ function shutdown() {
   stopSeo();
   stopVeilleNour();
   stopVegebudget();
+  stopImpacteur();
   stopBackups();
   server.close(() => {
     db.close();
