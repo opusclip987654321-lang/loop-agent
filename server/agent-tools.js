@@ -17,6 +17,7 @@ import { PROJECTS } from './projects.js';
 import { defaultProjectDoc, defaultMoneyDoc, newIdea } from './defaults.js';
 import { creerDepot } from './depots.js';
 import * as tri from './reponses-nour.js';
+import * as revue from './nour-revue.js';
 import '../public/periodes.js';
 
 const P = globalThis.LAPeriodes;
@@ -398,6 +399,7 @@ export function createAgentTools({ db, dataDir, onAgentWrite = () => {}, onToolD
             ? { semaine: doc.seo[0].semaine, site: doc.seo[0].site, note_sur_100: doc.seo[0].note, note_precedente: doc.seo[1]?.note ?? null, actions_possibles: doc.seo[0].actions.map((a) => a.texte), consigne: 'Compte rendu SEO du dimanche (sans IA). Pour corriger un point, proposer_action ou proposer_idee : rien ne se change sans la validation de Walid.' }
             : undefined,
           reponses_restaurants: p.id === 'nourmeet' ? tri.resumePourAgent(tri.lireEtat(db)) : undefined,
+          methode_prospection: p.id === 'nourmeet' && dataDir ? revue.resume(dataDir) || undefined : undefined,
           bilans_a_ecrire: missingBilans(doc),
           derniers_bilans: (doc.bilans || []).slice(0, 4).map((b) => ({ periode: b.gran + ' ' + b.period, pourquoi: b.why, action_decisive: b.decisive || undefined, par: b.by })),
           memoire: (doc.memories || []).map((m, index) => ({
@@ -1131,6 +1133,65 @@ export function createAgentTools({ db, dataDir, onAgentWrite = () => {}, onToolD
         const types = {};
         for (const r of nouvelles) types[r.type] = (types[r.type] || 0) + 1;
         return `${nouvelles.length} réponse(s) triée(s) (${Object.entries(types).map(([k, v]) => v + ' ' + k).join(', ')}). ${ouvertes.length} demande(s) ouverte(s) pour Walid.`;
+      },
+    },
+    {
+      name: 'revue_methode_nour',
+      description:
+        'Nūr Meet seulement : la revue de la semaine de la méthode de prospection (textes des mails, recherches, relances, mails par jour). Renvoie semaine:null s’il n’y a rien à faire ; sinon la consigne et les données (méthode, leçons, historique, chiffres par version et par profil, réponses triées, réponse de Walid à une proposition radicale). Décide puis appelle ecrire_revue_nour.',
+      inputSchema: { type: 'object', properties: { projet: { type: 'string', description: 'nourmeet' } }, required: ['projet'] },
+      handler(args) {
+        if (findProject(args.projet).id !== 'nourmeet') throw new ToolError('La revue de la méthode ne concerne que le projet nourmeet.');
+        const r = revue.pourRevue(db, dataDir);
+        if (r.semaine && r.donnees.proposition_radicale_en_attente) {
+          const cur = db.getDoc('project:nourmeet');
+          const t = cur && (JSON.parse(cur.value).tasks || []).find((x) => x.id === tri.ACTION);
+          const d = t && (t.demandes || []).find((x) => x.radicale === r.donnees.proposition_radicale_en_attente.semaine);
+          r.donnees.walid_sur_radical = d ? { statut: d.statut, reponse: d.reponse || null, echanges: (d.echanges || []).slice(-4).map((e) => ({ de: e.de, texte: e.texte })) } : null;
+        }
+        return r;
+      },
+    },
+    {
+      name: 'ecrire_revue_nour',
+      description:
+        'Nūr Meet seulement : enregistre la revue de la semaine (le JSON de la consigne de revue_methode_nour). Un changement non radical est vérifié puis appliqué : n8n l’utilise dès le lendemain matin. Un changement radical n’est PAS appliqué : il devient une demande à Walid.',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          projet: { type: 'string', description: 'nourmeet' },
+          semaine: { type: 'string', description: 'Le lundi de la semaine, donné par revue_methode_nour (AAAA-MM-JJ).' },
+          revue: { type: 'object', description: '{changer, methode, changements, pourquoi, lecons, radical, question}' },
+        },
+        required: ['projet', 'semaine', 'revue'],
+      },
+      handler(args) {
+        if (findProject(args.projet).id !== 'nourmeet') throw new ToolError('La revue de la méthode ne concerne que le projet nourmeet.');
+        let e;
+        try {
+          e = revue.ecrireRevue(dataDir, String(args.semaine), args.revue);
+        } catch (err) {
+          throw new ToolError(String(err.message || err));
+        }
+        if (e.question) {
+          let texte = null;
+          mutateProject('nourmeet', 'agent:nourmeet', (doc) => {
+            const t = (doc.tasks || []).find((x) => x.id === tri.ACTION);
+            if (!t) return;
+            const d = ouvrirDemande(t, `Prospection Nūr Meet : changement important proposé par la revue du lundi — ${e.question}`, {
+              source: 'agent',
+              pourquoi: 'La revue de la semaine propose de changer l’offre, le prix, la cible ou la zone. Rien n’est appliqué sans ton accord : réponds oui ou non (avec ta raison) puis « C’est fait » ; la revue suivante appliquera ou abandonnera.',
+            });
+            if (!d) return;
+            d.radicale = e.semaine;
+            d.pieces = [{ titre: 'Ce qui changerait et pourquoi', texte: `${e.changements.map((c) => '- ' + c).join('\n')}\n\nPourquoi : ${e.pourquoi}` }];
+            texte = d.texte;
+          });
+          if (texte) onToolDone('agent:nourmeet', 'demander_a_walid', { projet: 'nourmeet', demande: texte });
+        }
+        if (e.erreur) return `Revue notée, mais rien n’est changé : ${e.erreur}`;
+        if (e.question) return 'Revue notée. Le changement est radical : il attend la décision de Walid (demande ouverte).';
+        return e.changer ? `Revue notée : méthode passée en version ${e.version}, servie à n8n dès demain matin.` : 'Revue notée : méthode inchangée.';
       },
     },
     {

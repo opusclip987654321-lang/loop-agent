@@ -139,6 +139,48 @@ envoyes7 = [l for l in envois if l.get("statut") == "envoye" and (jour_envoi(l) 
 ouverts7 = sum(1 for l in envoyes7 if str(l.get("id")) in premiere_ouverture)
 corps = {"jours": stats, "glissant7": {"envoyes": len(envoyes7), "ouverts": ouverts7}}
 
+# Pour la revue du lundi (reprise du cerveau, 09/11/2026) : chaque restaurant contacté, son nom
+# remplacé par une empreinte (Loop Agent la recalcule depuis les réponses triées), son profil et
+# ses mails (jour, version, type) ; plus les envois et échecs par jour (filet de sécurité).
+import hashlib as _h
+
+
+def empreinte(nom):
+    return _h.sha256(str(nom or "").strip().lower().encode()).hexdigest()[:12]
+
+
+mails_par_nom = {}
+par_jour = {}
+for l in envois:
+    j = jour_envoi(l)
+    if not j:
+        continue
+    if l.get("statut") in ("envoye", "echec"):
+        par_jour.setdefault(j, [0, 0])[0 if l.get("statut") == "envoye" else 1] += 1
+    if l.get("statut") == "envoye" and l.get("nom"):
+        v, typ = version_et_type(l.get("objet"), l.get("corps"))
+        mails_par_nom.setdefault(empreinte(l.get("nom")), []).append([j, v, typ])
+contactes = []
+for p in prospects:
+    if not jour_de(p.get("date_premier_envoi")) or not p.get("nom"):
+        continue
+    h = empreinte(p.get("nom"))
+    rech = re.search(r"recherche : ([^·]+)", str(p.get("indices_google") or ""))
+    contactes.append({
+        "h": h,
+        "dep": str(p.get("code_postal"))[:2] if p.get("code_postal") else None,
+        "recherche": rech.group(1).strip()[:120] if rech else None,
+        "prix": str(p.get("niveau_prix"))[:4] if p.get("niveau_prix") else None,
+        "halal": str(p.get("halal") or "").startswith("confirm"),
+        "privatisation": str(p.get("privatisation") or "").startswith("confirm"),
+        "mails": sorted(mails_par_nom.get(h, []))[-6:],
+    })
+corps["revue"] = {
+    "contactes": contactes,
+    "parJour": {j: par_jour[j] for j in sorted(par_jour)[-60:]},
+    "sansEmail": sum(1 for p in prospects if p.get("statut") == "sans_email"),
+}
+
 # Toutes les réponses des restaurants (décision de Walid du 09/11 : rien n'est supposé déjà traité), pour le tri par Claude dans Loop Agent
 # (reprise du cerveau, 09/11/2026) : texte coupé avant la citation du mail d'origine,
 # adresses et téléphones masqués ; le nom du restaurant est retrouvé par son adresse ou l'objet.
@@ -233,7 +275,7 @@ except Exception as e:
     print("base Nūr Meet illisible :", str(e)[:200])
 
 if ESSAI:
-    print(json.dumps({**corps, "reponses": f"{len(corps.get('reponses', []))} réponse(s) à trier (textes non affichés)", "mes_reponses": f"{len(corps.get('mes_reponses', []))} mail(s) de Walid (textes non affichés)"}, ensure_ascii=False, indent=1))
+    print(json.dumps({**corps, "reponses": f"{len(corps.get('reponses', []))} réponse(s) à trier (textes non affichés)", "mes_reponses": f"{len(corps.get('mes_reponses', []))} mail(s) de Walid (textes non affichés)", "revue": f"{len(corps['revue']['contactes'])} restaurant(s) contacté(s), {sum(len(c['mails']) for c in corps['revue']['contactes'])} mail(s) rattaché(s), {len(corps['revue']['parJour'])} jour(s) d'envois"}, ensure_ascii=False, indent=1))
     sys.exit(0)
 
 jeton = (ICI / "jeton").read_text().strip()

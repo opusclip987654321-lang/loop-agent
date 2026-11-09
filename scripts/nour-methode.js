@@ -32,6 +32,38 @@ if (cmd === 'importer') {
   etat.historique = [{ version: src.methode.version, at: new Date().toISOString(), par: 'import du cerveau central', methode: src.methode }, ...(etat.historique || [])].slice(0, 60);
   enregistrer(dataDir, etat);
   console.log(`Méthode v${src.methode.version} importée${etat.pause ? ' (en pause)' : ''}. Elle est servie par Loop Agent.`);
+} else if (cmd === 'importer-revue') {
+  // Lit le fichier loop-nour-meet.json du cerveau central : historique daté, leçons et revues
+  // passées, pour que la revue du lundi de Loop Agent reparte de là où le cerveau s'est arrêté.
+  let input = '';
+  for await (const c of process.stdin) input += c;
+  let src;
+  try {
+    src = JSON.parse(input);
+  } catch {
+    console.log('Entrée illisible : il faut le fichier loop-nour-meet.json du cerveau.');
+    process.exit(1);
+  }
+  if (!etat.methode) {
+    console.log('Aucune méthode dans Loop Agent : importe d’abord la méthode.');
+    process.exit(1);
+  }
+  const hist = (src.historique || []).filter((h) => h && Number.isInteger(h.version) && h.methode && !verifier(h.methode).length);
+  if (!hist.some((h) => h.version === etat.methode.version)) {
+    console.log(`La version en place (v${etat.methode.version}) n’est pas dans l’historique du cerveau : rien n’est importé.`);
+    process.exit(1);
+  }
+  etat.historique = hist
+    .map((h) => ({ version: h.version, at: h.quand, par: h.par, changements: h.changements, pourquoi: h.pourquoi, methode: h.methode }))
+    .sort((a, b) => (a.at < b.at ? 1 : -1))
+    .slice(0, 60);
+  etat.lecons = (src.lecons || []).map((l) => ({ semaine: l.semaine, texte: String(l.texte || '').slice(0, 300) })).slice(-40);
+  etat.revues = (src.revues || [])
+    .filter((r) => !r.erreur)
+    .map((r) => ({ semaine: r.semaine, at: r.quand, changer: r.changer, version: r.version, changements: r.changements || [], pourquoi: r.pourquoi || '', question: r.question || null, erreur: null }))
+    .slice(0, 30);
+  enregistrer(dataDir, etat);
+  console.log(`Importé du cerveau : ${etat.historique.length} version(s) datée(s), ${etat.lecons.length} leçon(s), ${etat.revues.length} revue(s). Version en place : v${etat.methode.version} depuis le ${etat.historique.find((h) => h.version === etat.methode.version).at.slice(0, 10)}.`);
 } else if (cmd === 'voir') {
   if (!etat.methode) {
     console.log('Aucune méthode.');
@@ -58,6 +90,6 @@ if (cmd === 'importer') {
   enregistrer(dataDir, etat);
   console.log(`Méthode revenue à la v${h.version}.`);
 } else {
-  console.log('Usage : importer (JSON sur l’entrée standard) | voir | adresse | revenir <version>');
+  console.log('Usage : importer (JSON sur l’entrée standard) | importer-revue (loop-nour-meet.json du cerveau sur l’entrée standard) | voir | adresse | revenir <version>');
   process.exitCode = 1;
 }

@@ -10,6 +10,7 @@ import { createAgentTools, CONNECTOR_INSTRUCTIONS } from './agent-tools.js';
 import { servir as servirMethodeNour } from './nour-methode.js';
 import { DEPOT_RE, prendreDepot } from './depots.js';
 import { enregistrerATrier } from './reponses-nour.js';
+import { enregistrerDonnees as enregistrerDonneesRevue, filet as filetNour, charger as chargerMethode, enregistrer as enregistrerMethode } from './nour-revue.js';
 import { ROUTE as RELEVE_NOUR_ROUTE, jetonValide as jetonReleveValide, nettoyer as nettoyerReleve, enregistrerReleve } from './releve-nour.js';
 
 const PUBLIC_DIR = fileURLToPath(new URL('../public/', import.meta.url));
@@ -406,13 +407,19 @@ export function createApp({
         }
         let releve;
         try {
-          releve = nettoyerReleve(await readJson(req, 1024 * 1024));
+          releve = nettoyerReleve(await readJson(req, 3 * 1024 * 1024));
         } catch (e) {
           throw e instanceof HttpError ? e : new HttpError(400, String(e.message || e));
         }
         const ecrits = enregistrerReleve(db, releve);
         const nouvelles = enregistrerATrier(db, releve.reponses, Object.keys(releve.jours).sort().pop(), undefined, releve.mesReponses);
-        return send(res, 200, { ok: true, ecrits, reponses_a_trier: nouvelles });
+        let annulee = null;
+        if (releve.revue && enregistrerDonneesRevue(db, releve.revue)) {
+          // Filet : une version de la loop qui casse les envois est annulée seule.
+          const etat = chargerMethode(dataDir);
+          if (etat && etat.methode && (annulee = filetNour(etat, releve.revue))) enregistrerMethode(dataDir, etat);
+        }
+        return send(res, 200, { ok: true, ecrits, reponses_a_trier: nouvelles, filet: annulee || undefined });
       }
       // Pas d'OAuth : la connexion se fait par une clé dans l'en-tête. On répond
       // clairement « rien ici » (404) aux recherches de configuration OAuth.
