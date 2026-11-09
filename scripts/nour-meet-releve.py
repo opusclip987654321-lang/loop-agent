@@ -151,6 +151,12 @@ def masquer(t):
 
 
 par_email = {str(p.get("email") or "").lower(): p for p in prospects if p.get("email")}
+# Mes réponses (Walid), lues dans np_mes_reponses (Nour Meet 5, dossier Envoyés) : adresse et date seulement.
+mes_envois = {}
+for m in tableau("np_mes_reponses", ids):
+    a = str(m.get("destinataire") or "").lower()
+    if a and m.get("envoye"):
+        mes_envois.setdefault(a, []).append(str(m["envoye"]))
 noms_longs = sorted([p for p in prospects if len(str(p.get("nom") or "")) >= 5], key=lambda p: -len(str(p.get("nom"))))
 a_trier = []
 for r in reponses:
@@ -161,12 +167,16 @@ for r in reponses:
     brut = str(r.get("texte") or "")
     p = par_email.get(str(r.get("email") or "").lower()) or next((x for x in noms_longs if objet and str(x.get("nom")).lower() in objet.lower()), None)
     cle = hashlib.sha256(f"{j}|{r.get('de') or r.get('email') or ''}|{objet}|{brut[:200]}".encode()).hexdigest()[:16]
+    adresses = {str(r.get("email") or "").lower(), str((p or {}).get("email") or "").lower()} - {""}
+    recu = str(r.get("recu") or "")
+    apres = sorted(d for a in adresses for d in mes_envois.get(a, []) if d >= recu)
     texte = re.split(r"\n\s*(?:>|Le .{0,120}a écrit|De ?:|From ?:)", brut)[0]
     a_trier.append({
         "cle": cle, "jour": j,
         "nom": str(p.get("nom"))[:80] if p and p.get("nom") else None,
         "ville": str(p.get("ville"))[:40] if p and p.get("ville") else None,
         "objet": masquer(objet)[:150], "texte": masquer(texte).strip()[:800],
+        "repondu_le": jour_de(apres[0]) if apres else None,
     })
 corps["reponses"] = sorted(a_trier, key=lambda x: x["jour"])[-200:]
 

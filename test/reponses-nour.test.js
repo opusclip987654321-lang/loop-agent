@@ -57,6 +57,16 @@ test('tri : un intéressé devient une demande à Walid, le texte est effacé, l
     const etat = JSON.parse(db.getDoc('nour-reponses').value);
     assert.equal(Object.keys(etat.aTrier).length, 0);
     assert.ok(!JSON.stringify(etat).includes('Intéressé, appelez'));
+    // Walid répond au Bistrot : le relevé suivant le voit dans ses mails envoyés, la demande se ferme seule.
+    enregistrerATrier(db, nettoyerReponses([{ cle: cle1, jour: today, texte: 'x', repondu_le: today }]), today);
+    const ferme = JSON.parse(db.getDoc('project:nourmeet').value).tasks.find((x) => x.id === 'nourmeet-mails').demandes.find((d) => /Le Bistrot/.test(d.texte));
+    assert.equal(ferme.statut, 'faite');
+    assert.match(ferme.reponse, /tu as répondu/);
+    // Une réponse positive à laquelle Walid a déjà répondu n'ouvre pas de demande.
+    const cle4 = '4'.repeat(16);
+    enregistrerATrier(db, nettoyerReponses([{ cle: cle4, jour: today, nom: 'Déjà Vu', texte: 'Oui !', repondu_le: today }]), today);
+    await tools.trier_reponses.handler({ projet: 'nourmeet', reponses: [{ cle: cle4, type: 'INTERESSE', resume: 'Oui.' }] });
+    assert.ok(!JSON.stringify(JSON.parse(db.getDoc('project:nourmeet').value).tasks).includes('Déjà Vu'));
     // Un second tri des mêmes clés ne fait rien (pas de doublon de demande).
     assert.match(await tools.trier_reponses.handler({ projet: 'nourmeet', reponses: [{ cle: cle1, type: 'INTERESSE', resume: 'x' }] }), /Aucune réponse/);
   } finally {

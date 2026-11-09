@@ -1083,7 +1083,7 @@ export function createAgentTools({ db, dataDir, onAgentWrite = () => {}, onToolD
         if (findProject(args.projet).id !== 'nourmeet') throw new ToolError('Le tri des réponses ne concerne que le projet nourmeet.');
         const at = nowIso();
         const nouvelles = mutate(tri.KEY, () => ({ aTrier: {}, triees: {} }), (etat) => tri.noterTri(etat, args.reponses, at), 'agent:nourmeet');
-        if (!nouvelles.length && !Object.values(tri.lireEtat(db).triees).some((x) => tri.POSITIFS.has(x.type) && !x.demandee))
+        if (!nouvelles.length && !Object.values(tri.lireEtat(db).triees).some((x) => tri.POSITIFS.has(x.type) && !x.demandee && !x.repondu_le))
           return 'Aucune réponse enregistrée : clés inconnues ou déjà triées (relis reponses_a_trier).';
         const etat = tri.lireEtat(db);
         const parJour = tri.positifsParJour(etat);
@@ -1104,16 +1104,23 @@ export function createAgentTools({ db, dataDir, onAgentWrite = () => {}, onToolD
           // pour elles (décision de Walid du 09/11 : ne jamais supposer qu'il a déjà répondu).
           const textes = new Map(nouvelles.map((x) => [x.cle, x]));
           const aDemander = Object.entries(etat.triees)
-            .filter(([, x]) => tri.POSITIFS.has(x.type) && !x.demandee)
+            .filter(([, x]) => tri.POSITIFS.has(x.type) && !x.demandee && !x.repondu_le)
             .map(([cle, x]) => ({ ...x, cle, objet: textes.get(cle)?.objet, texte: textes.get(cle)?.texte }));
           for (const r of aDemander) {
             const qui = r.nom || 'Un restaurant';
+            const titre = `Répondre à ${qui}${r.ville ? ' (' + r.ville + ')' : ''} : ${r.type === 'INTERESSE' ? 'intéressé' : 'pose une question'} — ${r.resume}`;
             const d = ouvrirDemande(t, `Répondre à ${qui}${r.ville ? ' (' + r.ville + ')' : ''} : ${r.type === 'INTERESSE' ? 'intéressé' : 'pose une question'} — ${r.resume}`, {
               source: 'agent',
               pourquoi: `Ce restaurant a répondu le ${r.jour.split('-').reverse().join('/')} au mail de prospection. Un restaurant qui montre de l'intérêt attend une réponse rapide, sinon il passe à autre chose. Réponds-lui depuis contact@nourmeet.com : son mail complet, avec ses coordonnées, est dans cette boîte.`,
             });
             demandees.push(r.cle);
-            if (!d) continue;
+            if (!d) {
+              // Demande déjà ouverte (avant le 09/11) : on la relie à la réponse pour pouvoir la fermer seule.
+              const deja = (t.demandes || []).find((x) => x.statut === 'ouverte' && norm(x.texte) === norm(titre));
+              if (deja && !deja.cleReponse) deja.cleReponse = r.cle;
+              continue;
+            }
+            d.cleReponse = r.cle;
             if (r.texte || r.objet) d.pieces = [{ titre: 'Sa réponse (adresse et téléphone masqués)', texte: `Objet : ${r.objet || '—'}\n\n${r.texte || ''}` }];
             ouvertes.push(d.texte);
           }

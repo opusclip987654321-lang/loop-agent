@@ -51,7 +51,7 @@ export function nettoyerReponses(list) {
     const texte = str(r.texte, 800);
     const objet = str(r.objet, 150);
     if (!texte && !objet) continue;
-    out.push({ cle: r.cle, jour: r.jour, nom: str(r.nom, 80), ville: str(r.ville, 40), objet, texte });
+    out.push({ cle: r.cle, jour: r.jour, nom: str(r.nom, 80), ville: str(r.ville, 40), objet, texte, repondu_le: JOUR.test(String(r.repondu_le)) ? r.repondu_le : null });
   }
   return out;
 }
@@ -63,26 +63,66 @@ export function ajouterATrier(etat, reponses, today) {
   etat.aTrier = etat.aTrier || {};
   etat.triees = etat.triees || {};
   let n = 0;
+  const repondues = [];
   for (const r of reponses) {
-    if (etat.triees[r.cle] || etat.aTrier[r.cle]) continue;
+    const connue = etat.triees[r.cle] || etat.aTrier[r.cle];
+    if (connue) {
+      // Walid a répondu depuis (vu dans ses mails envoyés) : on le note une fois.
+      if (r.repondu_le && !connue.repondu_le) {
+        connue.repondu_le = r.repondu_le;
+        repondues.push({ cle: r.cle, repondu_le: r.repondu_le });
+        n++;
+      }
+      continue;
+    }
     etat.aTrier[r.cle] = r;
     n++;
   }
+  etat.dernieresRepondues = repondues;
   const limite = new Date(Date.parse(today + 'T12:00:00Z') - 365 * 86400000).toISOString().slice(0, 10);
   for (const [k, r] of Object.entries(etat.aTrier)) if (r.jour < limite) delete etat.aTrier[k];
   return n;
 }
 
-export function enregistrerATrier(db, reponses, today) {
+export function enregistrerATrier(db, reponses, today, nowIso = new Date().toISOString()) {
   if (!reponses.length) return 0;
   for (let i = 0; i < 5; i++) {
     const cur = db.getDoc(KEY);
     const etat = cur ? JSON.parse(cur.value) : vide();
     const n = ajouterATrier(etat, reponses, today);
+    const repondues = etat.dernieresRepondues || [];
+    delete etat.dernieresRepondues;
     if (!n && cur) return 0;
-    if (db.putDoc(KEY, JSON.stringify(etat), cur ? cur.version : 0, 'agent:releve-n8n').ok) return n;
+    if (db.putDoc(KEY, JSON.stringify(etat), cur ? cur.version : 0, 'agent:releve-n8n').ok) {
+      if (repondues.length) fermerDemandesRepondues(db, repondues, nowIso);
+      return n;
+    }
   }
   throw new Error('Document occupé, réessaie.');
+}
+
+const fr = (j) => j.split('-').reverse().join('/');
+
+// Ferme toute seule la demande « Répondre à … » quand Walid a répondu au restaurant.
+export function fermerDemandesRepondues(db, repondues, nowIso) {
+  const parCle = new Map(repondues.map((r) => [r.cle, r.repondu_le]));
+  for (let i = 0; i < 5; i++) {
+    const cur = db.getDoc('project:nourmeet');
+    if (!cur) return 0;
+    const doc = JSON.parse(cur.value);
+    const t = (doc.tasks || []).find((x) => x.id === ACTION);
+    let n = 0;
+    for (const d of (t && t.demandes) || []) {
+      if (d.statut !== 'ouverte' || !parCle.has(d.cleReponse)) continue;
+      d.statut = 'faite';
+      d.fermeeLe = nowIso;
+      d.reponse = `Fermée toute seule : tu as répondu à ce restaurant le ${fr(parCle.get(d.cleReponse))} (vu dans tes mails envoyés).`;
+      n++;
+    }
+    if (!n) return 0;
+    if (db.putDoc('project:nourmeet', JSON.stringify(doc), cur.version, 'agent:releve-n8n').ok) return n;
+  }
+  return 0;
 }
 
 export function lireEtat(db) {
@@ -97,7 +137,7 @@ export function noterTri(etat, tries, nowIso) {
     const r = x && etat.aTrier[x.cle];
     if (!r || !TYPES_REPONSE[x.type]) continue;
     const resume = masquer(String(x.resume || '')).replace(/\s+/g, ' ').trim().slice(0, 300);
-    etat.triees[x.cle] = { type: x.type, resume, jour: r.jour, nom: r.nom, ville: r.ville, trie: nowIso };
+    etat.triees[x.cle] = { type: x.type, resume, jour: r.jour, nom: r.nom, ville: r.ville, trie: nowIso, repondu_le: r.repondu_le || undefined };
     delete etat.aTrier[x.cle];
     nouvelles.push({ ...etat.triees[x.cle], cle: x.cle, objet: r.objet, texte: r.texte });
   }
@@ -129,6 +169,6 @@ export function resumePourAgent(etat) {
     dernieres: Object.values(etat.triees || {})
       .sort((x, y) => (y.jour > x.jour ? 1 : y.jour < x.jour ? -1 : 0))
       .slice(0, 20)
-      .map((r) => ({ jour: r.jour, restaurant: r.nom || 'inconnu', type: r.type, resume: r.resume })),
+      .map((r) => ({ jour: r.jour, restaurant: r.nom || 'inconnu', type: r.type, resume: r.resume, walid_a_repondu_le: r.repondu_le || undefined })),
   };
 }
