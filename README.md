@@ -101,6 +101,10 @@ Chaque dimanche à partir de 8 h (Paris), Loop Agent contrôle nourmeet.com, veg
 
 Chaque heure, Loop Agent lit `https://vegebudget.fr/api/stats` (jeton dans `/data/vegebudget.json`, droits 600, rangé par `scripts/vegebudget-jeton.js ranger`, jamais affiché) et remplit les indicateurs visites et inscriptions (par jour) et abonnés payants (total du jour) du projet vegebudget. Reprise du cerveau central.
 
+## Relevé Patreon (Impacteur Communauté)
+
+Toutes les 3 heures, Loop Agent lit en lecture seule les membres de la campagne Patreon (API v2) et remplit « Nouveaux membres Patreon » (arrivées actives par jour, 14 derniers jours) et « Revenus Patreon du mois » (total mensuel des membres actifs). Seuls des nombres entrent, aucun nom. Accès (client, secret, clé d'accès, clé de renouvellement) dans `/data/patreon.json` (droits 600), rangés par `ssh -t loop-agent-vps 'docker exec -it loop-agent node scripts/patreon-jeton.js ranger'` (saisie masquée) ; la clé d'accès est renouvelée toute seule avant d'expirer. `essai` affiche seulement des totaux, `retirer` débranche.
+
 ## Données
 
 Volume Docker `loop-agent_loop_agent_data` : `loop-agent.sqlite` (tout) et `files/` (factures).

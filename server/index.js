@@ -12,6 +12,7 @@ import { createSeo } from './seo.js';
 import { createNourVeille } from './nour-veille.js';
 import { createReleveVegebudget } from './releve-vegebudget.js';
 import { createReleveImpacteur } from './releve-impacteur.js';
+import { createRelevePatreon } from './releve-patreon.js';
 
 const config = {
   port: Number(process.env.PORT || 3000),
@@ -91,6 +92,9 @@ const stopVegebudget = createReleveVegebudget({ db, dataDir: config.dataDir }).s
 // Invitations d'Email interview (Google Sheet Impacteur via n8n), chaque heure. Sans adresse rangée, ne fait rien.
 const stopImpacteur = createReleveImpacteur({ db, dataDir: config.dataDir }).start();
 
+// Membres Patreon d'Impacteur Communauté, toutes les 3 heures. Sans accès rangé, ne fait rien.
+const stopPatreon = createRelevePatreon({ db, dataDir: config.dataDir }).start();
+
 const stopBackups = scheduleBackups({
   db,
   dataDir: config.dataDir,
@@ -116,6 +120,7 @@ function shutdown() {
   stopVeilleNour();
   stopVegebudget();
   stopImpacteur();
+  stopPatreon();
   stopBackups();
   server.close(() => {
     db.close();
