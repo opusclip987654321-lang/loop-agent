@@ -26,7 +26,9 @@ export function lireMembres(pages) {
     const d = a.pledge_relationship_start ? parisDate(Date.parse(a.pledge_relationship_start)) : null;
     if (d) arrivees[d] = (arrivees[d] || 0) + 1;
   }
-  return { actifs: actifs.length, revenusMois: Math.round(centimes) / 100, arrivees };
+  const statuts = {};
+  for (const a of membres) statuts[a.patron_status || 'gratuit'] = (statuts[a.patron_status || 'gratuit'] || 0) + 1;
+  return { actifs: actifs.length, revenusMois: Math.round(centimes) / 100, arrivees, lus: membres.length, statuts };
 }
 
 export function appliquer(doc, lu, aujourdhui, nowIso) {

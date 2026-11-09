@@ -62,6 +62,7 @@ if (cmd === 'ranger') {
     const lu = await createRelevePatreon({ db, dataDir }).lireTout();
     const arr = Object.entries(lu.arrivees).sort().slice(-5).map(([d, n]) => `${d}: ${n}`).join(', ');
     console.log(`Patreon répond : ${lu.actifs} membre(s) actif(s), ${lu.revenusMois} par mois au total · dernières arrivées : ${arr || 'aucune'}`);
+    console.log(`Fiches lues chez Patreon : ${lu.lus} · par statut : ${JSON.stringify(lu.statuts)}`);
   } catch (e) {
     console.log('Échec : ' + e.message);
     process.exitCode = 1;
