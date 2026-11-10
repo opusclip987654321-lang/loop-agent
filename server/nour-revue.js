@@ -126,6 +126,7 @@ export function revueAFaire(etat, maintenant = new Date()) {
 }
 
 export const CONSIGNE_REVUE = `Tu pilotes seul la loop de prospection des restaurateurs de Nūr Meet (soirées speed dating et networking dans des restaurants d'Île-de-France ; le restaurant paie un abonnement : Standard 69 € HT/mois ou Premium 89 € HT/mois, sans engagement).
+ESSAI GRATUIT (décision de Walid du 10/11/2026) : un restaurant qui hésite peut essayer 1 mois gratuitement, sans carte bancaire, depuis son espace restaurateur ; rien n'est prélevé à la fin, il choisit alors une formule ou l'essai s'arrête. Tu peux le dire dans les mails et les relances : ce n'est pas un changement « radical ». Ne promets rien de plus (ni durée plus longue, ni gratuité sans limite).
 OBJECTIF : 20 restaurateurs abonnés payants. Étapes : réponse positive, inscription, abonnement.
 Commence par relire tes LEÇONS : ne refais pas un essai déjà raté sans raison nouvelle. Puis décide la méthode de la semaine, un essai à la fois quand c'est possible. Si les données sont trop maigres, ne change rien et dis-le.
 Tu peux changer : textes (objet et corps de initial, relance1, relance2), recherches Google Maps (1 à 10), jours de relance, premiers mails par jour (10 à 80).
