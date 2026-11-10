@@ -11,6 +11,7 @@ import { servir as servirMethodeNour } from './nour-methode.js';
 import { DEPOT_RE, prendreDepot } from './depots.js';
 import { enregistrerATrier } from './reponses-nour.js';
 import { enregistrerDonnees as enregistrerDonneesRevue, filet as filetNour, charger as chargerMethode, enregistrer as enregistrerMethode } from './nour-revue.js';
+import { nettoyerProjets, enregistrerProjets } from './releve-serveurs.js';
 import { ROUTE as RELEVE_NOUR_ROUTE, jetonValide as jetonReleveValide, nettoyer as nettoyerReleve, enregistrerReleve } from './releve-nour.js';
 
 const PUBLIC_DIR = fileURLToPath(new URL('../public/', import.meta.url));
@@ -407,8 +408,12 @@ export function createApp({
           throw new HttpError(401, 'Jeton refusé.');
         }
         let releve;
+        let autresProjets = {};
         try {
-          releve = nettoyerReleve(await readJson(req, 3 * 1024 * 1024));
+          const brut = await readJson(req, 3 * 1024 * 1024);
+          releve = nettoyerReleve(brut);
+          // Chiffres des autres projets du même serveur (Impacteur Sponsors, Leviaro), joints au même envoi.
+          autresProjets = nettoyerProjets(brut && brut.projets);
         } catch (e) {
           throw e instanceof HttpError ? e : new HttpError(400, String(e.message || e));
         }
@@ -417,6 +422,7 @@ export function createApp({
             if (alerter) Promise.resolve(alerter(lignes.join('\n\n'))).catch((e) => console.error('alerte Nūr Meet', String(e.message || e)));
           },
         });
+        ecrits.push(...enregistrerProjets(db, autresProjets, { aujourdhui: Object.keys(releve.jours).sort().pop() }));
         const nouvelles = enregistrerATrier(db, releve.reponses, Object.keys(releve.jours).sort().pop(), undefined, releve.mesReponses);
         let annulee = null;
         if (releve.revue && enregistrerDonneesRevue(db, releve.revue)) {

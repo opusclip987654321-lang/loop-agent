@@ -2,6 +2,8 @@
 """Relevé chiffré de la prospection Nūr Meet, envoyé à Loop Agent (reprise du cerveau central).
 
 À installer sur le VPS Nūr, dans ~/outils/nour-releve/, lancé chaque heure par cron.
+Depuis le 10/11/2026 il joint aussi : ce qui attend la validation de Walid sur Nūr Meet (deux
+nombres), et les chiffres du jour d'Impacteur Sponsors et de Leviaro (calculés par chaque projet).
 - Lit les tableaux n8n np_envois, np_ouvertures, np_reponses, np_prospects (API publique,
   LECTURE SEULE) avec la clé n8n déjà rangée dans ~/outils/sauvegarde-n8n/.env.
 - Calcule SEULEMENT des chiffres, pour aujourd'hui et hier (heure de Paris) et sur 7 jours :
@@ -288,6 +290,37 @@ try:
         print("base Nūr Meet illisible :", (sortie.stderr or "").strip()[:200])
 except Exception as e:
     print("base Nūr Meet illisible :", str(e)[:200])
+
+# Chiffres des autres projets du même serveur (demande de Walid du 10/11/2026 : tout en automatique).
+# Chaque projet calcule lui-même ses nombres, avec son propre code, et sort une ligne JSON
+# ({"jours": {"AAAA-MM-JJ": {...}}, "etat": {...}}) ; Loop Agent ne garde que des nombres et des dates.
+# Un projet qui ne répond pas (conteneur arrêté, ancienne version) est sauté sans rien casser.
+PROJETS = {
+    "impacteur-sponsors": ["docker", "exec", "impacteur-sponsors", "node", "src/releve.js"],
+    "leviaro": ["docker", "exec", "CONTENEUR:leviaro.*web", "npm", "run", "-s", "agent", "--", "releve"],
+}
+corps["projets"] = {}
+for nom, commande in PROJETS.items():
+    try:
+        import subprocess
+        # « CONTENEUR:motif » : le nom du conteneur dépend du dossier du projet, on le cherche parmi ceux qui tournent.
+        if commande[2].startswith("CONTENEUR:"):
+            noms = subprocess.run(["docker", "ps", "--format", "{{.Names}}"], capture_output=True, text=True, timeout=20).stdout.split()
+            trouves = [x for x in noms if re.search(commande[2][10:], x)]
+            if not trouves:
+                print(f"relevé {nom} : conteneur introuvable")
+                continue
+            commande = commande[:2] + [trouves[0]] + commande[3:]
+        sortie = subprocess.run(commande + ["--jours", "120" if RATTRAPAGE else "3"], capture_output=True, text=True, timeout=60)
+        lignes = [l for l in sortie.stdout.strip().splitlines() if l.startswith("{")]
+        if sortie.returncode == 0 and lignes:
+            lu = json.loads(lignes[-1])
+            if isinstance(lu, dict) and isinstance(lu.get("jours"), dict):
+                corps["projets"][nom] = {"jours": lu["jours"], "etat": lu.get("etat") if isinstance(lu.get("etat"), dict) else {}}
+                continue
+        print(f"relevé {nom} illisible :", (sortie.stderr or sortie.stdout or "").strip()[:200])
+    except Exception as e:
+        print(f"relevé {nom} illisible :", str(e)[:200])
 
 if ESSAI:
     print(json.dumps({**corps, "reponses": f"{len(corps.get('reponses', []))} réponse(s) à trier (textes non affichés)", "mes_reponses": f"{len(corps.get('mes_reponses', []))} mail(s) de Walid (textes non affichés)", "revue": f"{len(corps['revue']['contactes'])} restaurant(s) contacté(s), {sum(len(c['mails']) for c in corps['revue']['contactes'])} mail(s) rattaché(s), {len(corps['revue']['parJour'])} jour(s) d'envois"}, ensure_ascii=False, indent=1))

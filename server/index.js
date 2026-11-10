@@ -14,6 +14,7 @@ import { createReleveVegebudget } from './releve-vegebudget.js';
 import { createReleveImpacteur } from './releve-impacteur.js';
 import { createRelevePatreon } from './releve-patreon.js';
 import { createReleveSearchConsole } from './releve-search-console.js';
+import { createReleveYoutube } from './releve-youtube.js';
 
 const config = {
   port: Number(process.env.PORT || 3000),
@@ -97,6 +98,8 @@ const stopImpacteur = createReleveImpacteur({ db, dataDir: config.dataDir }).sta
 const stopPatreon = createRelevePatreon({ db, dataDir: config.dataDir }).start();
 // Search Console (vegebudget.fr, leviaro.fr), toutes les 6 heures. Sans clé rangée, ne fait rien.
 const stopSearchConsole = createReleveSearchConsole({ db, dataDir: config.dataDir }).start();
+// YouTube de Petites Histoires Vraies (flux publics de la chaîne, sans clé), toutes les 3 heures.
+const stopYoutube = process.env.RELEVE_YOUTUBE === '0' ? () => {} : createReleveYoutube({ db }).start();
 
 const stopBackups = scheduleBackups({
   db,
@@ -125,6 +128,7 @@ function shutdown() {
   stopImpacteur();
   stopPatreon();
   stopSearchConsole();
+  stopYoutube();
   stopBackups();
   server.close(() => {
     db.close();

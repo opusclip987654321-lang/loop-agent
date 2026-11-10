@@ -30,3 +30,30 @@ test('lit les chiffres du site et remplit les 3 indicateurs, sans double compte'
   assert.equal(doc.kpiValues.length, 5);
   assert.throws(() => lireStats({}), /illisible/);
 });
+
+test('Pinterest par jour et part des visiteurs qui s’inscrivent (7 jours glissants)', () => {
+  const jours = Array.from({ length: 8 }, (_, i) => ({ jour: `2026-11-0${i + 1}`, visiteurs: 10, inscrits: i === 7 ? 2 : 0, sources: { direct: 6, 'pinterest.com': 2, pinterest: 1, 'google.com': 1 } }));
+  const k = [
+    ...kpis,
+    { id: 'k-google', name: 'Visites venues de Google', agg: 'somme', status: 'valide' },
+    { id: 'k-insta', name: 'Abonnés Instagram', agg: 'dernier', status: 'valide' },
+    { id: 'k-part', name: "Part des visiteurs qui s'inscrivent", agg: 'dernier', status: 'valide' },
+    { id: 'k-pin', name: 'Visites venus de Pinterest', agg: 'somme', status: 'valide' },
+  ];
+  const doc = { kpis: k, kpiValues: [] };
+  appliquer(doc, lireStats({ jours, totaux: { abonnes: 1 } }), '2026-11-08', 'x');
+  const v = (kpi, date) => (doc.kpiValues.find((x) => x.kpi === kpi && x.date === date) || {}).value;
+  assert.equal(v('k-pin', '2026-11-08'), 3);
+  assert.equal(v('k-visites', '2026-11-08'), 10, 'les visites du site ne sont pas confondues avec celles de Google ou de Pinterest');
+  assert.equal(v('k-google', '2026-11-08'), undefined);
+  assert.equal(v('k-insta', '2026-11-08'), undefined, 'les abonnés Instagram ne reçoivent pas les abonnés payants');
+  assert.equal(v('k-abo', '2026-11-08'), 1);
+  // 2 inscriptions pour 70 visiteurs sur 7 jours = 2,9 %.
+  assert.equal(v('k-part', '2026-11-08'), 2.9);
+  assert.equal(v('k-part', '2026-11-07'), 0);
+  assert.equal(v('k-part', '2026-11-06'), undefined, 'pas 7 jours de recul : indisponible');
+  // Ancienne version du site, sans origines par jour : Pinterest reste indisponible, jamais 0.
+  const doc2 = { kpis: k, kpiValues: [] };
+  appliquer(doc2, lireStats({ jours: [{ jour: '2026-11-08', visiteurs: 0, inscrits: 0 }], totaux: {} }), '2026-11-08', 'x');
+  assert.equal(doc2.kpiValues.some((x) => x.kpi === 'k-pin' || x.kpi === 'k-part'), false);
+});
