@@ -63,6 +63,14 @@ maj() {
   local nom="$1" dir="$2" log="$HOME/auto-deploy/journal.log" bad="$HOME/auto-deploy/.refusee-$1"
   note() { echo "$(date '+%F %T') [$nom] $*" >> "$log"; }
   cd "$dir" 2>/dev/null || { note "Dossier $dir introuvable."; return 1; }
+  git fetch -q origin main 2>>"$log" || { note "git fetch impossible (accès GitHub ?)."; return 1; }
+  # Fichier changé à la main mais déjà identique à la version de GitHub (ex. la modif a été recopiée
+  # dans le dépôt) : ce n'est pas un conflit, on le remet au niveau de git et on continue.
+  local f modifs; modifs=$(git diff --name-only HEAD 2>/dev/null)
+  if [ -n "$modifs" ] && git diff --quiet origin/main -- $modifs 2>/dev/null; then
+    note "Fichiers déjà identiques à GitHub, repris par git : $(echo $modifs)"
+    git checkout -q HEAD -- $modifs
+  fi
   if [ -n "$(git status --porcelain --untracked-files=no)" ]; then
     local stamp="$HOME/auto-deploy/.modif-$nom"
     if [ "$(date +%F)" != "$(cat "$stamp" 2>/dev/null)" ]; then
@@ -71,7 +79,6 @@ maj() {
     fi
     return 1
   fi
-  git fetch -q origin main 2>>"$log" || { note "git fetch impossible (accès GitHub ?)."; return 1; }
   local old new
   old=$(git rev-parse HEAD); new=$(git rev-parse origin/main)
   [ "$old" = "$new" ] && return 0

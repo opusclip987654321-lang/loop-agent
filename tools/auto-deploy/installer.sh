@@ -43,8 +43,10 @@ brancher() { # nom dépôt dossier
   [ -n "$dir" ] && [ -d "$dir" ] || { echo "   introuvable, ignoré"; A_FAIRE+=("$nom : dossier introuvable"); return; }
   local neuf=0
   if [ ! -d "$dir/.git" ]; then
-    git -C "$dir" init -q -b main && git -C "$dir" remote add origin "$(url_modele "$depot")"; neuf=1
+    git -C "$dir" init -q -b main && git -C "$dir" remote add origin "$(url_modele "$depot")"
   fi
+  # Pas encore de version (git créé à un essai précédent sans accès GitHub) : à brancher.
+  git -C "$dir" rev-parse -q --verify HEAD >/dev/null || neuf=1
   if ! GIT_SSH_COMMAND="ssh -o BatchMode=yes -o StrictHostKeyChecking=accept-new" git -C "$dir" fetch -q origin main 2>/dev/null; then
     cle_deploiement "$depot" "$dir"
     if ! git -C "$dir" fetch -q origin main 2>/dev/null; then
@@ -59,8 +61,11 @@ brancher() { # nom dépôt dossier
     local manquants; manquants=$(git -C "$dir" ls-files --deleted)
     [ -n "$manquants" ] && git -C "$dir" checkout -- $manquants && echo "   ajoutés (absents du serveur) : $(echo $manquants)"
   fi
-  local diff; diff=$(git -C "$dir" status --porcelain --untracked-files=no)
-  if [ -n "$diff" ]; then
+  local diff modifs; diff=$(git -C "$dir" status --porcelain --untracked-files=no)
+  modifs=$(git -C "$dir" diff --name-only HEAD 2>/dev/null)
+  if [ -n "$diff" ] && [ -n "$modifs" ] && git -C "$dir" diff --quiet origin/main -- $modifs 2>/dev/null; then
+    echo "   OK : les fichiers changés sur le serveur sont déjà sur GitHub ($(echo $modifs)) ; la prochaine mise à jour les reprend."
+  elif [ -n "$diff" ]; then
     echo "   DIFFÉRENCES avec GitHub (rien n'est écrasé ; la mise à jour auto attend qu'elles soient réglées) :"
     git -C "$dir" diff --stat | sed 's/^/     /'
     A_FAIRE+=("$nom : fichiers différents de GitHub")
