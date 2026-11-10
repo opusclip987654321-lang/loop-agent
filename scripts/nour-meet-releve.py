@@ -264,7 +264,11 @@ SELECT json_build_object(
         AND "createdAt" > now() - interval '%s' GROUP BY 1) t),
   'total', (SELECT count(*) FROM "User" WHERE role = 'ORGANIZER' AND NOT "isDemo" AND "deletedAt" IS NULL),
   'abonnes', (SELECT count(DISTINCT "restaurantId") FROM "RestaurantSubscription"
-      WHERE lower(status::text) IN ('active', 'trialing') AND "cancelledAt" IS NULL)
+      WHERE lower(status::text) IN ('active', 'trialing') AND "cancelledAt" IS NULL AND NOT "freeTrial"),
+  'essais', (SELECT count(*) FROM "RestaurantSubscription"
+      WHERE lower(status::text) = 'trialing' AND "cancelledAt" IS NULL AND "freeTrial"),
+  'restaurants_en_attente', (SELECT count(*) FROM "Restaurant" WHERE status::text = 'PENDING' AND NOT "isDemo"),
+  'soirees_en_attente', (SELECT count(*) FROM "Event" WHERE status::text = 'PENDING_REVIEW' AND NOT "isDemo")
 );
 """
 try:
@@ -277,7 +281,9 @@ try:
         r = json.loads(sortie.stdout.strip().splitlines()[-1])
         for d in jours:
             stats[d]["inscriptions"] = int((r.get("jours") or {}).get(d, 0))
-        corps["restaurants"] = {"total": int(r.get("total") or 0), "abonnes": int(r.get("abonnes") or 0)}
+        corps["restaurants"] = {"total": int(r.get("total") or 0), "abonnes": int(r.get("abonnes") or 0), "essais": int(r.get("essais") or 0)}
+        # Ce qui attend la validation de Walid (demande du 10/11/2026) : Loop Agent le prévient sur Telegram.
+        corps["en_attente"] = {"restaurants": int(r.get("restaurants_en_attente") or 0), "soirees": int(r.get("soirees_en_attente") or 0)}
     else:
         print("base Nūr Meet illisible :", (sortie.stderr or "").strip()[:200])
 except Exception as e:

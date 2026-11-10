@@ -152,6 +152,7 @@ export function createApp({
   onAgentWrite = () => {},
   onToolDone = () => {},
   onWalidSave = () => {},
+  alerter,
 }) {
   if (!passwordHash) throw new Error('LOOP_AGENT_PASSWORD_HASH manquant : lance « npm run hash-password ».');
   const limiter = createLoginLimiter();
@@ -411,7 +412,11 @@ export function createApp({
         } catch (e) {
           throw e instanceof HttpError ? e : new HttpError(400, String(e.message || e));
         }
-        const ecrits = enregistrerReleve(db, releve);
+        const ecrits = enregistrerReleve(db, releve, {
+          onAlerte: (lignes) => {
+            if (alerter) Promise.resolve(alerter(lignes.join('\n\n'))).catch((e) => console.error('alerte Nūr Meet', String(e.message || e)));
+          },
+        });
         const nouvelles = enregistrerATrier(db, releve.reponses, Object.keys(releve.jours).sort().pop(), undefined, releve.mesReponses);
         let annulee = null;
         if (releve.revue && enregistrerDonneesRevue(db, releve.revue)) {

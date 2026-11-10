@@ -60,8 +60,31 @@ export function nettoyer(body) {
   if (!Object.keys(jours).length) throw new Error('Aucun jour valable.');
   const g = body.glissant7 || {};
   const glissant7 = { envoyes: n(g.envoyes), ouverts: n(g.ouverts) };
-  const r = body.restaurants && typeof body.restaurants === 'object' ? { total: n(body.restaurants.total), abonnes: n(body.restaurants.abonnes) } : null;
-  return { jours, glissant7, restaurants: r, reponses: nettoyerReponses(body.reponses), mesReponses: nettoyerMesReponses(body.mes_reponses), revue: nettoyerDonnees(body.revue) };
+  const r = body.restaurants && typeof body.restaurants === 'object' ? { total: n(body.restaurants.total), abonnes: n(body.restaurants.abonnes), essais: n(body.restaurants.essais) } : null;
+  // Ce qui attend la validation de Walid dans l'administration de Nūr Meet : deux nombres, rien d'autre.
+  const a = body.en_attente && typeof body.en_attente === 'object' ? { restaurants: n(body.en_attente.restaurants), soirees: n(body.en_attente.soirees) } : null;
+  return { jours, glissant7, restaurants: r, enAttente: a, reponses: nettoyerReponses(body.reponses), mesReponses: nettoyerMesReponses(body.mes_reponses), revue: nettoyerDonnees(body.revue) };
+}
+
+// Alerte Telegram (demande de Walid du 10/11/2026) : dès qu'un restaurant inscrit ou une soirée
+// soumise attend sa validation sur Nūr Meet. Une alerte seulement quand le nombre MONTE par rapport
+// au relevé précédent (un premier relevé compare à 0), jamais un rappel à chaque heure.
+export const ADMIN_NOUR = 'https://nourmeet.com/admin';
+export function alertesValidation(avant, apres) {
+  if (!apres) return [];
+  const lignes = [];
+  const voir = (cle, un, plusieurs, page) => {
+    const now = apres[cle];
+    if (now === null || now === undefined) return;
+    const prev = (avant && avant[cle]) || 0;
+    if (now > prev) {
+      const nouveaux = now - prev;
+      lignes.push(`🔴 Nūr Meet : ${nouveaux} ${nouveaux > 1 ? plusieurs : un} ta validation${now > nouveaux ? ` (${now} en attente au total)` : ''}.\n${ADMIN_NOUR}/${page}`);
+    }
+  };
+  voir('restaurants', 'nouveau restaurant attend', 'nouveaux restaurants attendent', 'restaurants');
+  voir('soirees', 'nouvelle soirée attend', 'nouvelles soirées attendent', 'events');
+  return lignes;
 }
 
 // Applique le relevé au document du projet (fonction pure, testée seule).
@@ -72,6 +95,8 @@ export function appliquer(doc, releve, nowIso) {
   doc.releveN8n.jours = Object.fromEntries(garder.map((d) => [d, doc.releveN8n.jours[d]]));
   doc.releveN8n.glissant7 = releve.glissant7;
   doc.releveN8n.maj = nowIso;
+  // Un relevé sans ces nombres (ancien programme, base illisible) garde les derniers connus.
+  if (releve.enAttente) doc.releveN8n.enAttente = { ...(doc.releveN8n.enAttente || {}), ...Object.fromEntries(Object.entries(releve.enAttente).filter(([, v]) => v !== null)) };
 
   const kpis = (doc.kpis || []).filter((k) => k.status === 'valide');
   const contact = kpis.find((k) => /contact/i.test(k.name));
@@ -123,7 +148,7 @@ export function appliquer(doc, releve, nowIso) {
       }
   if (abonnes && releve.restaurants && releve.restaurants.abonnes !== null) {
     const auj = Object.keys(releve.jours).sort().pop();
-    poser(abonnes, auj, releve.restaurants.abonnes, `${releve.restaurants.abonnes} restaurant(s) abonné(s) sur ${releve.restaurants.total ?? '?'} inscrit(s) au total.`);
+    poser(abonnes, auj, releve.restaurants.abonnes, `${releve.restaurants.abonnes} restaurant(s) abonné(s) payant(s) sur ${releve.restaurants.total ?? '?'} inscrit(s) au total${releve.restaurants.essais ? `, plus ${releve.restaurants.essais} en essai gratuit sans carte` : ''}.`);
     doc.kpiValues[0].origin = ORIGIN_BASE;
     ecrits.push(abonnes.name + ' ' + auj);
   }
@@ -132,15 +157,20 @@ export function appliquer(doc, releve, nowIso) {
 }
 
 // Écrit dans le projet avec la même transaction versionnée que le reste (rien n'est écrasé).
-export function enregistrerReleve(db, releve, { project = 'nourmeet', now = () => new Date().toISOString() } = {}) {
+export function enregistrerReleve(db, releve, { project = 'nourmeet', now = () => new Date().toISOString(), onAlerte } = {}) {
   const key = 'project:' + project;
   for (let i = 0; i < 5; i++) {
     const cur = db.getDoc(key);
     if (!cur) throw new Error('Projet nourmeet introuvable.');
     const doc = JSON.parse(cur.value);
+    const alertes = alertesValidation(doc.releveN8n && doc.releveN8n.enAttente, releve.enAttente);
     const ecrits = appliquer(doc, releve, now());
     const r = db.putDoc(key, JSON.stringify(doc), cur.version, 'agent:releve-n8n');
-    if (r.ok) return ecrits;
+    if (r.ok) {
+      // L'alerte part une fois le relevé enregistré : jamais deux fois pour le même restaurant.
+      if (alertes.length && onAlerte) onAlerte(alertes);
+      return ecrits;
+    }
   }
   throw new Error('Document occupé, réessaie.');
 }

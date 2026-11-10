@@ -8,7 +8,7 @@ import { execFileSync } from 'node:child_process';
 import { openDb } from '../server/db.js';
 import { createApp } from '../server/app.js';
 import { hashPassword } from '../server/auth.js';
-import { nettoyer, appliquer } from '../server/releve-nour.js';
+import { nettoyer, appliquer, alertesValidation, enregistrerReleve } from '../server/releve-nour.js';
 
 const kpis = [
   { id: 'k-contact', name: 'Restaurants contactés', agg: 'somme', status: 'valide' },
@@ -83,4 +83,47 @@ test('inscriptions et abonnés des restaurants (base de l’application)', () =>
   const doc2 = { kpis: k2, kpiValues: [] };
   appliquer(doc2, nettoyer({ jours: { '2026-11-09': { premiers: 2 } }, glissant7: {} }), 'x');
   assert.equal(doc2.kpiValues.some((x) => x.kpi === 'k-ins' || x.kpi === 'k-abo'), false);
+});
+
+test('alerte seulement quand un restaurant ou une soirée de plus attend la validation de Walid', () => {
+  // Premier relevé : ce qui attend déjà est annoncé une fois.
+  assert.equal(alertesValidation(undefined, { restaurants: 0, soirees: 0 }).length, 0);
+  const a = alertesValidation(undefined, { restaurants: 1, soirees: 0 });
+  assert.equal(a.length, 1);
+  assert.match(a[0], /1 nouveau restaurant attend ta validation\./);
+  assert.match(a[0], /nourmeet\.com\/admin\/restaurants/);
+  // Même nombre une heure après : pas de rappel. Un de moins (validé) : rien non plus.
+  assert.equal(alertesValidation({ restaurants: 1, soirees: 0 }, { restaurants: 1, soirees: 0 }).length, 0);
+  assert.equal(alertesValidation({ restaurants: 2, soirees: 1 }, { restaurants: 1, soirees: 0 }).length, 0);
+  const b = alertesValidation({ restaurants: 1, soirees: 0 }, { restaurants: 3, soirees: 1 });
+  assert.equal(b.length, 2);
+  assert.match(b[0], /2 nouveaux restaurants attendent ta validation \(3 en attente au total\)/);
+  assert.match(b[1], /1 nouvelle soirée attend ta validation\./);
+  // Ancien programme sans ces nombres, ou base illisible : aucune alerte, dernier état gardé.
+  assert.equal(alertesValidation({ restaurants: 1 }, null).length, 0);
+  assert.equal(alertesValidation({ restaurants: 1, soirees: 0 }, { restaurants: null, soirees: null }).length, 0);
+  // Seuls des nombres entrent.
+  assert.deepEqual(nettoyer({ jours: { '2026-11-10': { premiers: 1 } }, glissant7: {}, en_attente: { restaurants: '2', soirees: 'Chez Ali', nom: 'x' } }).enAttente, { restaurants: 2, soirees: null });
+});
+
+test('l’alerte part une seule fois, après l’enregistrement du relevé', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'la-alerte-'));
+  const db = openDb(dir);
+  try {
+    const cur = db.getDoc('project:nourmeet');
+    const doc = cur ? JSON.parse(cur.value) : { kpis: [], kpiValues: [] };
+    if (!cur) db.putDoc('project:nourmeet', JSON.stringify(doc), 0, 'test');
+    const recues = [];
+    const envoyer = (en_attente) => enregistrerReleve(db, nettoyer({ jours: { '2026-11-10': { premiers: 1 } }, glissant7: {}, en_attente }), { onAlerte: (l) => recues.push(...l) });
+    envoyer({ restaurants: 1, soirees: 0 });
+    envoyer({ restaurants: 1, soirees: 0 });
+    envoyer(undefined);
+    envoyer({ restaurants: 1, soirees: 1 });
+    assert.equal(recues.length, 2);
+    assert.match(recues[0], /restaurant/);
+    assert.match(recues[1], /soirée/);
+  } finally {
+    db.close();
+    rmSync(dir, { recursive: true, force: true });
+  }
 });

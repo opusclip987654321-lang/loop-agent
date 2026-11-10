@@ -106,7 +106,7 @@ const stopBackups = scheduleBackups({
 });
 
 const server = createServer(
-  createApp({ db, ...config, onToolDone: (agent, tool, args) => notifier.note(agent, tool, args), onWalidSave: relay.onWalidSave })
+  createApp({ db, ...config, alerter: notifier.enabled ? (texte) => notifier.send(texte) : undefined, onToolDone: (agent, tool, args) => notifier.note(agent, tool, args), onWalidSave: relay.onWalidSave })
 );
 server.requestTimeout = 60_000;
 server.listen(config.port, config.host, () => {
