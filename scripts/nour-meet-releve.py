@@ -269,7 +269,7 @@ SELECT json_build_object(
       WHERE lower(status::text) IN ('active', 'trialing') AND "cancelledAt" IS NULL AND NOT "freeTrial"),
   'essais', (SELECT count(*) FROM "RestaurantSubscription"
       WHERE lower(status::text) = 'trialing' AND "cancelledAt" IS NULL AND "freeTrial"),
-  'restaurants_en_attente', (SELECT count(*) FROM "Restaurant" WHERE status::text = 'PENDING' AND NOT "isDemo"),
+  'restaurants_en_attente', (SELECT count(*) FROM "Organizer" WHERE status::text = 'PENDING' AND NOT "isDemo"),
   'soirees_en_attente', (SELECT count(*) FROM "Event" WHERE status::text = 'PENDING_REVIEW' AND NOT "isDemo")
 );
 """
