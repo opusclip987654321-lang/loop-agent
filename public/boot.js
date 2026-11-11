@@ -243,6 +243,8 @@
       await loadScript('/documents.js');
       await loadScript('/frais.js');
       await loadScript('/agenda.js');
+      await loadScript('/charges-calc.js');
+      await loadScript('/charges.js');
       setStatus('Enregistré', 'green');
     } catch (e) {
       const main = document.getElementById('main');
