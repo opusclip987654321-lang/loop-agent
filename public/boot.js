@@ -241,6 +241,7 @@
       await loadScript('/objectifs.js');
       await loadScript('/resultats.js');
       await loadScript('/documents.js');
+      await loadScript('/frais.js');
       setStatus('Enregistré', 'green');
     } catch (e) {
       const main = document.getElementById('main');

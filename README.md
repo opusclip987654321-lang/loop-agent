@@ -129,6 +129,10 @@ Ordre décidé par Walid le 09/11/2026 : Planification → Priorités → Exécu
 
 Demande de Walid du 11/11/2026 : dans chaque projet, l'onglet « Documents » est le registre de tous les documents lus par le projet (relevés bancaires, charges, factures, impôts, prêt, bail…) et de ce qu'il en a retenu, pour savoir ce qui est déjà pris en compte (`public/documents.js`, champ `documents` du document du projet). Ces documents sont sensibles : **aucun fichier n'est envoyé à Loop Agent** (décision de Walid du 11/11/2026), seulement le nom, le type, la période, l'endroit où il se trouve et ce qui a été retenu (sans IBAN). L'agent note chaque document lu avec `enregistrer_document` ; Walid peut en signaler un (« à lire »), que l'agent lit là où il est. `lire_projet` → `documents` donne le registre pour qu'aucun document ne soit compté deux fois. Les factures de la page Argent rapprochées d'une dépense du projet s'affichent en dessous.
 
+## Onglet Frais évitables
+
+Demande de Walid du 11/11/2026 : dans chaque projet, l'onglet « Frais évitables » liste ce qu'il paie alors qu'il ne devrait pas (agios, frais d'incident ou commissions d'intervention, rejets de prélèvement ou de virement, frais de saisie, pénalités d'impôts, frais d'avocat ou de commissaire de justice, frais de recouvrement du syndic…), avec les totaux payé / perdu pour de bon / à venir / récupéré et, pour chaque frais, la piste pour ne plus le payer ou le récupérer (`public/frais.js`, champ `frais` du document du projet). L'agent note chaque frais lu sur un relevé ou un avis avec `enregistrer_frais_evitable` (montant lu et source ; un montant calculé ou annoncé est marqué estimation ; jamais d'IBAN) ; `lire_projet` → `frais_evitables` donne la liste et les totaux pour ne rien compter deux fois. Walid peut ajouter un frais, changer son état (contesté, remboursé), noter ce qui a été récupéré ou le retirer. Les montants vivent dans la base, jamais dans le dépôt.
+
 ## Données
 
 Volume Docker `loop-agent_loop_agent_data` : `loop-agent.sqlite` (tout) et `files/` (factures).
