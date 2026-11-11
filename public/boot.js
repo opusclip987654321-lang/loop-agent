@@ -242,6 +242,7 @@
       await loadScript('/resultats.js');
       await loadScript('/documents.js');
       await loadScript('/frais.js');
+      await loadScript('/agenda.js');
       setStatus('Enregistré', 'green');
     } catch (e) {
       const main = document.getElementById('main');
