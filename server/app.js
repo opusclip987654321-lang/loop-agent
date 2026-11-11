@@ -61,6 +61,30 @@ function detectFileType(buf) {
   return null;
 }
 
+// Documents d'un projet (onglet Documents, 11/11/2026) : en plus des PDF et images,
+// les relevés bancaires exportés en CSV, OFX, QIF ou texte, et les tableurs Excel.
+// Reconnus par leur contenu ET leur extension (un fichier binaire ne passe pas pour du texte).
+const TEXT_EXT = { '.csv': 'text/csv', '.txt': 'text/plain', '.md': 'text/markdown', '.ofx': 'application/x-ofx', '.qif': 'application/qif' };
+export function detectDocType(buf, name = '') {
+  const known = detectFileType(buf);
+  if (known) return known;
+  const ext = extname(String(name)).toLowerCase();
+  if (TEXT_EXT[ext] && buf.length && !buf.includes(0)) {
+    try {
+      new TextDecoder('utf-8', { fatal: true }).decode(buf);
+      return { mime: TEXT_EXT[ext] + '; charset=utf-8', ext };
+    } catch {
+      // Fichiers bancaires français souvent en Windows-1252 : gardés tels quels, en texte.
+      return { mime: TEXT_EXT[ext] + '; charset=windows-1252', ext };
+    }
+  }
+  if (ext === '.xlsx' && buf.length >= 4 && buf.subarray(0, 4).equals(Buffer.from([0x50, 0x4b, 0x03, 0x04])))
+    return { mime: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', ext };
+  if (ext === '.xls' && buf.length >= 8 && buf.subarray(0, 8).equals(Buffer.from([0xd0, 0xcf, 0x11, 0xe0, 0xa1, 0xb1, 0x1a, 0xe1])))
+    return { mime: 'application/vnd.ms-excel', ext };
+  return null;
+}
+
 // Vidéos déposées par les agents (à valider par Walid) : MP4, MOV, WebM.
 const MAX_VIDEO_BYTES = 300 * 1024 * 1024;
 function detectVideoType(buf) {
@@ -312,13 +336,13 @@ export function createApp({
     if (path === '/api/files' && method === 'POST') {
       checkOrigin(req);
       const buf = await readBody(req, MAX_FILE_BYTES);
-      const type = detectFileType(buf);
-      if (!type) throw new HttpError(415, 'Format accepté : PDF, PNG, JPG ou WebP.');
       let name = 'facture';
       try {
         name = decodeURIComponent(String(req.headers['x-file-name'] || 'facture'));
       } catch {}
       name = name.replace(/[\u0000-\u001f\\/]/g, '_').slice(0, 160) || 'facture';
+      const type = detectDocType(buf, name);
+      if (!type) throw new HttpError(415, 'Format accepté : PDF, PNG, JPG, WebP, CSV, OFX, QIF, TXT, MD ou Excel.');
       const id = randomBytes(12).toString('hex');
       await mkdir(filesDir, { recursive: true });
       await writeFile(join(filesDir, id), buf, { flag: 'wx' });

@@ -240,6 +240,7 @@
       await loadScript('/historique.js');
       await loadScript('/objectifs.js');
       await loadScript('/resultats.js');
+      await loadScript('/documents.js');
       setStatus('Enregistré', 'green');
     } catch (e) {
       const main = document.getElementById('main');
