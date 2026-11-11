@@ -36,3 +36,4 @@ Ce projet est suivi dans Loop Agent, identifiant de projet : <ID>.
 | Nūr Meet | nourmeet |
 | Ebook | ebook |
 | Gestion de Loop Agent | gestion-loop-agent |
+| Gestion Immo et banque | gestion-immo-banque |

@@ -81,7 +81,7 @@ test('connexion, état, écriture versionnée et conflit', async () => {
   assert.match(r.headers.get('set-cookie'), /SameSite=Strict/);
 
   const st = await (await fetch(base + '/api/state', { headers: { Cookie: cookie } })).json();
-  assert.equal(st.projects.length, 11);
+  assert.equal(st.projects.length, 12);
   assert.ok(st.projects.some((p) => p.id === 'impacteur-communaute'));
   assert.deepEqual(st.docs, {});
 
@@ -297,6 +297,13 @@ test('projet Gestion de Loop Agent : sa boucle propre en plus des 3 permanentes'
   const ids = r.out.actions.map((a) => a.id);
   assert.ok(ids.includes('gestion-loop-agent-organisation'));
   assert.equal(ids.length, 4);
+});
+
+test('projet Gestion Immo et banque : finances, immobilier et droit en plus des 3 permanentes', async () => {
+  const r = await call('lire_projet', { projet: 'gestion-immo-banque' });
+  const ids = r.out.actions.map((a) => a.id);
+  for (const s of ['finances', 'immo', 'droit', 'mails', 'stats', 'veille']) assert.ok(ids.includes(`gestion-immo-banque-${s}`), s);
+  assert.equal(ids.length, 6);
 });
 
 test('connecteur : objectif et résultats mesurés', async () => {
