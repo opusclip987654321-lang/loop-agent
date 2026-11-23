@@ -14,6 +14,32 @@ test('repère « Pour Walid : … » et « Walid doit … », mais pas le tablea
   assert.deepEqual(demandesDansTexte('Ligne ajoutée dans « Fait pour Walid » : 3 mails.'), []);
 });
 
+test('une demande repérée garde la phrase entière, pour rester compréhensible seule', () => {
+  assert.deepEqual(
+    demandesDansTexte('Réponses humaines :\n- Nivea : refus poli.\n- Bank of Africa : réponse en image, que Walid doit lire.\n- Superprof : accusé de réception.'),
+    ['Bank of Africa : réponse en image, que Walid doit lire.'],
+  );
+  // « y » renvoie à la phrase d'avant : on la reprend.
+  assert.deepEqual(
+    demandesDansTexte('La réponse à Block Blast est prête dans l’admin. Walid doit y joindre une capture de ses statistiques par pays. Suite lundi.'),
+    ['La réponse à Block Blast est prête dans l’admin. Walid doit y joindre une capture de ses statistiques par pays.'],
+  );
+  assert.deepEqual(demandesDansTexte('Couvertures prêtes. Walid doit choisir A ou D.'), ['Walid doit choisir A ou D.']);
+});
+
+test('pas de demande repérée en double quand l’agent vient de la faire avec demander_a_walid', async () => {
+  const s = setup();
+  try {
+    const p = await s.tools.lire_projet.handler({ projet: 'ebook' });
+    const action = p.actions[0].id;
+    await s.tools.demander_a_walid.handler({ projet: 'ebook', action, demande: 'Répondre à Block Blast en joignant la capture des pays' });
+    await s.tools.ecrire_tour.handler({ projet: 'ebook', action, constat: 'Réponse prête. Walid doit y joindre une capture.', decision: 'Attendre.' });
+    assert.equal(s.doc().tasks.find((x) => x.id === action).demandes.length, 1);
+  } finally {
+    s.done();
+  }
+});
+
 function setup() {
   const dataDir = mkdtempSync(join(tmpdir(), 'loop-agent-dem-'));
   const db = openDb(dataDir);

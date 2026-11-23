@@ -305,7 +305,17 @@ export function demandesDansTexte(...textes) {
   for (const s of textes) {
     const t = String(s || '');
     for (const m of t.matchAll(/(?<![Ff]ait )\b[Pp]our Walid\s*:\s*([^\n]+?)(?=(?<=[.!?])\s|\n|$)/g)) out.push(m[1]);
-    for (const m of t.matchAll(/\bWalid doit ([^\n]+?)(?=(?<=[.!?])\s|\n|$)/g)) out.push('Walid doit ' + m[1]);
+    // « Walid doit … » : on garde la phrase ENTIÈRE, pas seulement la fin. Sinon
+    // « Bank of Africa : réponse en image, que Walid doit lire. » devenait « Walid doit lire. »
+    // Et si la phrase renvoie à la précédente (« Walid doit y joindre… »), on la reprend aussi.
+    for (const ligne of t.split('\n')) {
+      const phrases = ligne.replace(/^\s*(?:[-•*–]|\d+[.)])\s+/, '').split(/(?<=[.!?])\s+/);
+      phrases.forEach((ph, k) => {
+        if (!/\bWalid doit\s+\S/.test(ph)) return;
+        const renvoi = /\bWalid doit (?:(?:y|en|le|la|les|lui|leur)\s|l[’'])/.test(ph);
+        out.push(renvoi && k > 0 ? `${phrases[k - 1]} ${ph}` : ph);
+      });
+    }
   }
   return [...new Set(out.map((x) => x.trim()))];
 }
@@ -656,7 +666,10 @@ export function createAgentTools({ db, dataDir, onAgentWrite = () => {}, onToolD
           };
           (t.reviewHistory = t.reviewHistory || []).unshift(entry);
           t.lastAgentTurn = entry.at;
-          const auto = demandesDansTexte(entry.aiObservation, entry.aiDecision, entry.plan)
+          // Le filet ne sert que si l'agent n'a pas déjà fait sa demande avec demander_a_walid
+          // pendant ce tour : sinon la même demande apparaissait deux fois, dont une moins claire.
+          const dejaDemande = (t.demandes || []).some((d) => d.source !== 'compte rendu' && Date.now() - Date.parse(d.at) < 30 * 60000);
+          const auto = (dejaDemande ? [] : demandesDansTexte(entry.aiObservation, entry.aiDecision, entry.plan))
             .map((x) => ouvrirDemande(t, x, { source: 'compte rendu' }))
             .filter(Boolean);
           if (args.statut) t.status = text(args.statut, 'statut', { max: 80 });
