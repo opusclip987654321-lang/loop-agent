@@ -70,7 +70,10 @@ test('filet : une version qui casse les envois est annulée seule', () => {
   assert.equal(filet(etat, donnees, new Date('2026-11-08T11:00:00Z')), null); // pas deux fois
 });
 
-test('outils : revue due, écriture, radical devient une demande à Walid', async () => {
+test('outils : revue due, écriture, radical devient une demande à Walid', async (t) => {
+  // Heure fixée (un mardi à 11 h, heure de Paris) : sans cela le test échouait chaque lundi
+  // avant 9 h, moment où aucune revue n'est due.
+  t.mock.timers.enable({ apis: ['Date'], now: new Date('2026-11-10T10:00:00Z') });
   const dataDir = mkdtempSync(join(tmpdir(), 'loop-agent-revue-'));
   const db = openDb(dataDir);
   const events = [];
